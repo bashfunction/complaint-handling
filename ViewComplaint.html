@@ -66,9 +66,13 @@
           class="field-input field-auto-filled" />
       </div>
       <div>
-        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Priority</label>
-        <input type="text" id="f-priority" readonly placeholder="Auto-filled"
-          class="field-input field-auto-filled" />
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Priority <span class="text-red-500">*</span></label>
+        <select id="f-priority" required class="field-input">
+          <option value="">-- Pilih Priority --</option>
+          <option value="Low">Low</option>
+          <option value="Normal">Normal</option>
+          <option value="High">High</option>
+        </select>
       </div>
       <div>
         <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">PIC</label>

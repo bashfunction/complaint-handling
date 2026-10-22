@@ -236,6 +236,7 @@ function loadProductData() {
       if (!result.success) { showToast('Gagal memuat data produk: ' + result.message, 'error'); return; }
       productData = result;
       populateProductCategoryDropdown();
+      populatePriorityDropdown();
     })
     .withFailureHandler(err => showToast('Gagal memuat data produk', 'error'))
     .getProductData();
@@ -250,6 +251,24 @@ function populateProductCategoryDropdown() {
     opt.textContent = cat;
     sel.appendChild(opt);
   });
+}
+
+function populatePriorityDropdown() {
+  const sel = document.getElementById('f-priority');
+  if (!sel) return;
+  const currentVal = sel.value;
+  const list = (productData && productData.priorities && productData.priorities.length > 0)
+    ? productData.priorities
+    : ['Low', 'Normal', 'High'];
+
+  sel.innerHTML = '<option value="">-- Pilih Priority --</option>';
+  list.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p;
+    opt.textContent = p;
+    sel.appendChild(opt);
+  });
+  if (currentVal) sel.value = currentVal;
 }
 
 function handleProductCatChange() {
@@ -333,14 +352,6 @@ function handleSubCatChange() {
     // but we can let user override
     document.getElementById('f-email-pic').value = '';
     document.getElementById('f-email-pic').placeholder = `Email untuk PIC: ${mapping['PIC'] || ''}`;
-
-    // Priority: derive from mappingData SLA
-    const slaVal = Number(mapping['SLA']);
-    let priority = 'Normal';
-    if (slaVal <= 3)  priority = 'High';
-    else if (slaVal <= 10) priority = 'Normal';
-    else priority = 'Low';
-    setAutoFilled('f-priority', priority);
   }
 }
 
@@ -350,7 +361,7 @@ function setAutoFilled(id, value) {
 }
 
 function clearAutoFilled() {
-  ['f-code-id', 'f-sla', 'f-classification', 'f-reason', 'f-pic', 'f-priority'].forEach(id => {
+  ['f-code-id', 'f-sla', 'f-classification', 'f-reason', 'f-pic'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
