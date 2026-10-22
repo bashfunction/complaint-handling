@@ -288,7 +288,7 @@ function handleProductCatChange() {
   const subSel = document.getElementById('f-sub-cat');
 
   ccSel.innerHTML = '<option value="">-- Pilih --</option>';
-  subSel.innerHTML = '<option value="">-- Pilih Category dulu --</option>';
+  subSel.innerHTML = '<option value="">-- Pilih ComplaintCategory dulu --</option>';
   ccSel.disabled = true;
   subSel.disabled = true;
   clearAutoFilled();
@@ -384,9 +384,9 @@ function resetComplaintForm() {
   document.getElementById('complaint-form').reset();
   clearAutoFilled();
   // Reset dropdowns
-  document.getElementById('f-complaint-cat').innerHTML = '<option value="">-- Pilih Product Category dulu --</option>';
+  document.getElementById('f-complaint-cat').innerHTML = '<option value="">-- Pilih ProductCategory dulu --</option>';
   document.getElementById('f-complaint-cat').disabled = true;
-  document.getElementById('f-sub-cat').innerHTML = '<option value="">-- Pilih Category dulu --</option>';
+  document.getElementById('f-sub-cat').innerHTML = '<option value="">-- Pilih ComplaintCategory dulu --</option>';
   document.getElementById('f-sub-cat').disabled = true;
 }
 

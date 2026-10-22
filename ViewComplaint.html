@@ -27,7 +27,7 @@
 
       <!-- Product Category -->
       <div>
-        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Product Category <span class="text-red-500">*</span></label>
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">ProductCategory <span class="text-red-500">*</span></label>
         <select id="f-product-cat" required onchange="handleProductCatChange()"
           class="field-input">
           <option value="">-- Pilih --</option>
@@ -36,19 +36,19 @@
 
       <!-- Complaint Category -->
       <div>
-        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Complaint Category <span class="text-red-500">*</span></label>
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">ComplaintCategory <span class="text-red-500">*</span></label>
         <select id="f-complaint-cat" required onchange="handleComplaintCatChange()"
           class="field-input" disabled>
-          <option value="">-- Pilih Product Category dulu --</option>
+          <option value="">-- Pilih ProductCategory dulu --</option>
         </select>
       </div>
 
       <!-- Sub Category -->
       <div>
-        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Sub Category <span class="text-red-500">*</span></label>
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Sub-Category <span class="text-red-500">*</span></label>
         <select id="f-sub-cat" required onchange="handleSubCatChange()"
           class="field-input" disabled>
-          <option value="">-- Pilih Category dulu --</option>
+          <option value="">-- Pilih ComplaintCategory dulu --</option>
         </select>
       </div>
     </div>
@@ -61,7 +61,7 @@
           class="field-input field-auto-filled" />
       </div>
       <div>
-        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">SLA (Hari Kerja)</label>
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">SLA</label>
         <input type="text" id="f-sla" readonly placeholder="Auto-filled"
           class="field-input field-auto-filled" />
       </div>
@@ -92,10 +92,10 @@
           class="field-input field-auto-filled" />
       </div>
     </div>
-    <!-- Email PIC (auto-filled from users sheet or manually entered) -->
+    <!-- Email PIC -->
     <div class="mt-4">
       <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Email PIC <span class="text-red-500">*</span></label>
-      <input type="email" id="f-email-pic" required placeholder="Email PIC (auto-filled atau isi manual)"
+      <input type="email" id="f-email-pic" required placeholder="Email PIC"
         class="field-input field-auto-filled" />
     </div>
   </div>
@@ -108,27 +108,27 @@
     </h3>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div>
-        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Nama Nasabah <span class="text-red-500">*</span></label>
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Name <span class="text-red-500">*</span></label>
         <input type="text" id="f-name" required placeholder="Nama lengkap nasabah"
           class="field-input" />
       </div>
       <div>
-        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Email Nasabah <span class="text-red-500">*</span></label>
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Account Number <span class="text-red-500">*</span></label>
+        <input type="text" id="f-account-number" required placeholder="Nomor rekening"
+          class="field-input" />
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Email Address <span class="text-red-500">*</span></label>
         <input type="email" id="f-email" required placeholder="email@nasabah.com"
           class="field-input" />
       </div>
       <div>
-        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">No. Telepon</label>
-        <input type="tel" id="f-phone" placeholder="08xxxxxxxxxx"
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Phone Number <span class="text-red-500">*</span></label>
+        <input type="tel" id="f-phone" required placeholder="08xxxxxxxxxx"
           class="field-input" />
       </div>
       <div>
-        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">No. Rekening</label>
-        <input type="text" id="f-account-number" placeholder="Nomor rekening"
-          class="field-input" />
-      </div>
-      <div>
-        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">No. Kartu ATM</label>
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">ATM Card Number</label>
         <input type="text" id="f-atm-card" placeholder="Nomor kartu ATM/Debit"
           class="field-input" />
       </div>
@@ -143,28 +143,28 @@
     </h3>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       <div>
-        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Tanggal Transaksi</label>
-        <input type="date" id="f-date-trx"
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Date Transaction <span class="text-red-500">*</span></label>
+        <input type="date" id="f-date-trx" required
           class="field-input" />
       </div>
       <div>
-        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Nominal Transaksi 1</label>
-        <input type="number" id="f-amount1" placeholder="0"
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Transaction Amount 1 <span class="text-red-500">*</span></label>
+        <input type="number" id="f-amount1" required placeholder="0"
           class="field-input" />
       </div>
       <div>
-        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Nominal Transaksi 2</label>
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Transaction Amount 2</label>
         <input type="number" id="f-amount2" placeholder="0"
           class="field-input" />
       </div>
       <div>
-        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">No. HP Tujuan</label>
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Destination Phone Number</label>
         <input type="tel" id="f-dest-phone" placeholder="Nomor HP tujuan transfer"
           class="field-input" />
       </div>
       <div>
-        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Provider</label>
-        <input type="text" id="f-provider" placeholder="Nama provider"
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Provider Name <span class="text-red-500">*</span></label>
+        <input type="text" id="f-provider" required placeholder="Nama provider"
           class="field-input" />
       </div>
     </div>
@@ -174,7 +174,7 @@
   <div class="m3-card p-6 border-t-4 border-t-slate-300">
     <h3 class="text-sm font-bold text-nano-blue mb-4 flex items-center gap-2">
       <span class="material-symbols-outlined text-lg">description</span>
-      Deskripsi Complaint
+      Description
     </h3>
     <textarea id="f-description" rows="4" placeholder="Tuliskan kronologi atau detail complaint nasabah..."
       class="field-input resize-none"></textarea>
