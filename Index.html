@@ -38,19 +38,23 @@
     };
   </script>
 
+  <script>
+    window.INITIAL_AUTH = <?!= JSON.stringify(initialAuth || {}) ?>;
+  </script>
+
   <?!= include('Stylesheet'); ?>
 </head>
 
 <body class="h-full bg-slate-50 font-sans text-slate-800">
 
   <!-- ═══════════════════════════════════════════════════
-       LOGIN SCREEN
+       AUTH SCREEN (Only shown if Google account is not registered)
   ════════════════════════════════════════════════════ -->
-  <div id="login-screen" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-nano-blue via-nano-blue-light to-slate-800">
+  <div id="auth-screen" class="hidden min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-nano-blue via-nano-blue-light to-slate-800">
     <div class="w-full max-w-md">
       <!-- Logo -->
       <div class="flex flex-col items-center mb-8">
-        <div class="flex items-center justify-center w-20 h-20 rounded-3xl bg-white/10 backdrop-blur-sm border border-white/20 mb-4">
+        <div class="flex items-center justify-center w-20 h-20 rounded-3xl bg-white/10 backdrop-blur-sm border border-white/20 mb-4 shadow-xl">
           <svg width="48" height="48" viewBox="0 0 85 85" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M 15 65 L 15 32 C 15 18, 26 10, 42 10 C 58 10, 68 20, 68 35 L 68 65" stroke="#30f101" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
@@ -59,49 +63,30 @@
         <p class="text-white/60 text-sm font-medium mt-1">Nanobank Syariah</p>
       </div>
 
-      <!-- Card -->
-      <div class="bg-white rounded-3xl shadow-2xl p-8">
-        <h2 class="text-lg font-bold text-nano-blue mb-1">Selamat Datang</h2>
-        <p class="text-sm text-slate-500 mb-6">Masukkan NIK dan Nama untuk masuk</p>
+      <!-- Access Denied Card -->
+      <div class="bg-white rounded-3xl shadow-2xl p-8 text-center animate-scaleIn">
+        <div class="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center mx-auto mb-4">
+          <span class="material-symbols-outlined text-3xl">no_accounts</span>
+        </div>
+        <h2 class="text-lg font-bold text-slate-800 mb-2">Akses Memerlukan Otorisasi</h2>
+        <p id="auth-error-msg" class="text-xs text-slate-600 leading-relaxed mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
+          Akun Google Chrome Anda belum terdaftar di sistem. Silakan hubungi Administrator.
+        </p>
 
-        <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
-          <div>
-            <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">NIK Karyawan</label>
-            <div class="relative">
-              <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg pointer-events-none">badge</span>
-              <input type="text" id="login-nik" required autocomplete="off" placeholder="Contoh: 522102"
-                class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-nano-blue/20 focus:border-nano-blue bg-slate-50 transition-all" />
-            </div>
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Nama Lengkap</label>
-            <div class="relative">
-              <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg pointer-events-none">person</span>
-              <input type="text" id="login-nama" required autocomplete="off" placeholder="Contoh: Bashir Hanafi"
-                class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-nano-blue/20 focus:border-nano-blue bg-slate-50 transition-all" />
-            </div>
-          </div>
-
-          <div id="login-error" class="hidden flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold">
-            <span class="material-symbols-outlined text-base">error</span>
-            <span id="login-error-msg"></span>
-          </div>
-
-          <button type="submit" id="login-btn"
-            class="w-full btn-primary-nano py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 mt-2">
-            <span class="material-symbols-outlined text-base text-nano-green" id="login-btn-icon">login</span>
-            <span id="login-btn-text">Masuk</span>
-          </button>
-        </form>
+        <button onclick="location.reload()"
+          class="w-full btn-primary-nano py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-md">
+          <span class="material-symbols-outlined text-base text-nano-green">refresh</span>
+          <span>Muat Ulang Halaman</span>
+        </button>
       </div>
-      <p class="text-center text-white/40 text-xs mt-6">© 2024 Nanobank Syariah. All rights reserved.</p>
+      <p class="text-center text-white/40 text-xs mt-6">© 2024 Nanobank Syariah &bull; Chrome Single Sign-On</p>
     </div>
   </div>
 
   <!-- ═══════════════════════════════════════════════════
-       MAIN APP SHELL (hidden until login)
+       MAIN APP SHELL
   ════════════════════════════════════════════════════ -->
-  <div id="app-shell" class="hidden h-screen flex overflow-hidden">
+  <div id="app-shell" class="h-screen flex overflow-hidden">
 
     <!-- SIDEBAR -->
     <aside id="sidebar" class="sidebar-expanded bg-white h-screen flex flex-col border-r border-slate-200 transition-all duration-300 ease-in-out z-30 shrink-0">
@@ -151,7 +136,7 @@
         </button>
       </nav>
 
-      <!-- User info + Logout -->
+      <!-- User info + SSO -->
       <div class="border-t border-slate-100 p-3">
         <div class="flex items-center gap-3 px-2 py-2">
           <div id="sidebar-avatar" class="w-9 h-9 rounded-full bg-nano-blue text-white flex items-center justify-center font-bold text-sm shrink-0 border-2 border-nano-green">SA</div>
@@ -159,9 +144,11 @@
             <p id="sidebar-name" class="text-xs font-bold text-slate-800 truncate">Syariah Admin</p>
             <p id="sidebar-role" class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate">admin</p>
           </div>
-          <button onclick="handleLogout()" title="Keluar" class="nav-text ml-auto p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0">
-            <span class="material-symbols-outlined text-lg">logout</span>
-          </button>
+          <div class="nav-text ml-auto shrink-0">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-green-50 text-green-700 border border-green-200" title="Terautentikasi otomatis via Profil Chrome">
+              SSO
+            </span>
+          </div>
         </div>
       </div>
     </aside>
@@ -179,7 +166,7 @@
           <div id="header-avatar" class="w-9 h-9 rounded-full bg-nano-blue text-white flex items-center justify-center font-bold text-sm border-2 border-nano-green">SA</div>
           <div class="hidden md:block">
             <p id="header-name" class="text-xs font-bold text-slate-800">Syariah Admin</p>
-            <p id="header-role" class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">admin</p>
+            <p id="header-email" class="text-[10px] font-medium text-slate-400">admin@nanobank.co.id</p>
           </div>
         </div>
       </header>

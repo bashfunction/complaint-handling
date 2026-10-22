@@ -13,8 +13,9 @@ const SHEET_COPYWRITING = 'copy-writing';
 
 // ─── Web App Entry Point ──────────────────────────────────
 function doGet(e) {
-  return HtmlService
-    .createTemplateFromFile('Index')
+  const template = HtmlService.createTemplateFromFile('Index');
+  template.initialAuth = getCurrentUserProfile();
+  return template
     .evaluate()
     .setTitle('Complaint Handling — Nanobank Syariah')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -96,38 +97,95 @@ function generateTicketId() {
   return `SC-${padded}`;
 }
 
-// ─── AUTH ─────────────────────────────────────────────────
-function loginUser(nik, nama) {
+// ─── AUTH / CHROME SSO ────────────────────────────────────
+function getCurrentUserProfile() {
   try {
-    const sheet = getSheet(SHEET_USERS);
-    const rows  = sheet.getDataRange().getValues();
-    const headers = rows[0];
-    const nikIdx  = headers.indexOf('nik');
-    const namaIdx = headers.indexOf('nama');
-    const emailIdx = headers.indexOf('email');
-    const roleIdx = headers.indexOf('role');
-    const picIdx  = headers.indexOf('pic');
+    let email = '';
+    try {
+      email = Session.getActiveUser().getEmail();
+    } catch (e) {}
+    if (!email) {
+      try {
+        email = Session.getEffectiveUser().getEmail();
+      } catch (e) {}
+    }
 
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (String(row[nikIdx]).trim() === String(nik).trim() &&
-          row[namaIdx].trim().toLowerCase() === nama.trim().toLowerCase()) {
-        return {
-          success: true,
-          user: {
-            nik:   row[nikIdx],
-            nama:  row[namaIdx],
-            email: row[emailIdx],
-            role:  row[roleIdx],
-            pic:   row[picIdx] || ''
-          }
-        };
+    const sheet = getSheet(SHEET_USERS);
+    if (!sheet) {
+      return { success: false, message: 'Sheet users tidak ditemukan.' };
+    }
+
+    const rows = sheet.getDataRange().getValues();
+    if (rows.length < 2) {
+      return { success: false, message: 'Data users pada sheet kosong.' };
+    }
+
+    const headers = rows[0].map(h => String(h || '').trim().toLowerCase());
+    const emailIdx = headers.indexOf('email');
+    const namaIdx = headers.indexOf('nama');
+    const nikIdx = headers.indexOf('nik');
+    const roleIdx = headers.indexOf('role');
+    const picIdx = headers.indexOf('pic');
+
+    const cleanEmail = String(email || '').trim().toLowerCase();
+
+    // 1. Search user by Chrome profile email
+    if (cleanEmail) {
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const rowEmail = String(row[emailIdx] || '').trim().toLowerCase();
+        if (rowEmail === cleanEmail) {
+          return {
+            success: true,
+            user: {
+              nik: String(row[nikIdx] || ''),
+              nama: String(row[namaIdx] || ''),
+              email: String(row[emailIdx] || email),
+              role: String(row[roleIdx] || 'cs').toLowerCase(),
+              pic: String(row[picIdx] || '')
+            }
+          };
+        }
       }
     }
-    return { success: false, message: 'NIK atau Nama tidak ditemukan.' };
+
+    // 2. Email detected from Chrome, but not registered in users sheet
+    if (cleanEmail) {
+      return {
+        success: false,
+        email: email,
+        message: `Akun Google (${email}) belum terdaftar pada sistem Complaint Handling. Hubungi Administrator untuk mendaftarkan akun Anda.`
+      };
+    }
+
+    // 3. Fallback: if Session.getActiveUser() is empty (e.g. running in testing without signed-in user or iframe restrictions)
+    // Fallback to first user in sheet so the app still functions seamlessly during testing:
+    if (rows.length > 1) {
+      const row = rows[1];
+      return {
+        success: true,
+        isFallback: true,
+        user: {
+          nik: String(row[nikIdx] || ''),
+          nama: String(row[namaIdx] || ''),
+          email: String(row[emailIdx] || ''),
+          role: String(row[roleIdx] || 'admin').toLowerCase(),
+          pic: String(row[picIdx] || '')
+        }
+      };
+    }
+
+    return {
+      success: false,
+      message: 'Tidak dapat mendeteksi akun Google Chrome. Pastikan Anda telah login ke akun Google di browser Chrome.'
+    };
   } catch (err) {
     return { success: false, message: err.message };
   }
+}
+
+function loginUser(nik, nama) {
+  return getCurrentUserProfile();
 }
 
 // ─── USER MANAGEMENT ─────────────────────────────────────

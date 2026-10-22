@@ -89,44 +89,55 @@ function getInitials(name) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// AUTH
+// AUTH & CHROME PROFILE AUTO-AUTHENTICATION
 // ─────────────────────────────────────────────────────────────
-function handleLogin(e) {
-  e.preventDefault();
-  const nik  = document.getElementById('login-nik').value.trim();
-  const nama = document.getElementById('login-nama').value.trim();
-  if (!nik || !nama) return;
+window.addEventListener('DOMContentLoaded', () => {
+  autoAuthenticate();
+});
 
-  const btn      = document.getElementById('login-btn');
-  const btnIcon  = document.getElementById('login-btn-icon');
-  const btnText  = document.getElementById('login-btn-text');
-  btn.disabled   = true;
-  btnIcon.classList.add('animate-spin');
-  btnText.textContent = 'Memverifikasi...';
-  document.getElementById('login-error').classList.add('hidden');
+function autoAuthenticate() {
+  const auth = window.INITIAL_AUTH;
+  if (auth && auth.success && auth.user) {
+    currentUser = auth.user;
+    initApp();
+    return;
+  }
 
+  // If server-side template initialAuth had an error message or was unregistered
+  if (auth && !auth.success && auth.message) {
+    showAuthError(auth.message);
+    return;
+  }
+
+  // Fallback to client-side RPC
+  showLoader('Memverifikasi akun Google Chrome...');
   google.script.run
     .withSuccessHandler(result => {
-      btn.disabled = false;
-      btnIcon.classList.remove('animate-spin');
-      btnText.textContent = 'Masuk';
-
-      if (result.success) {
+      hideLoader();
+      if (result && result.success && result.user) {
         currentUser = result.user;
         initApp();
       } else {
-        document.getElementById('login-error-msg').textContent = result.message;
-        document.getElementById('login-error').classList.remove('hidden');
+        showAuthError((result && result.message) || 'Akun Google Chrome belum terdaftar pada sistem.');
       }
     })
     .withFailureHandler(err => {
-      btn.disabled = false;
-      btnIcon.classList.remove('animate-spin');
-      btnText.textContent = 'Masuk';
-      document.getElementById('login-error-msg').textContent = 'Terjadi kesalahan. Coba lagi.';
-      document.getElementById('login-error').classList.remove('hidden');
+      hideLoader();
+      showAuthError('Terjadi kesalahan saat memverifikasi akun Chrome. Silakan muat ulang halaman.');
     })
-    .loginUser(nik, nama);
+    .getCurrentUserProfile();
+}
+
+function showAuthError(msg) {
+  const authScreen = document.getElementById('auth-screen');
+  if (authScreen) authScreen.classList.remove('hidden');
+  const errorEl = document.getElementById('auth-error-msg');
+  if (errorEl) errorEl.textContent = msg;
+  const appShell = document.getElementById('app-shell');
+  if (appShell) {
+    appShell.classList.add('hidden');
+    appShell.classList.remove('flex');
+  }
 }
 
 function initApp() {
@@ -135,48 +146,48 @@ function initApp() {
   const role     = (currentUser.role || '').toLowerCase();
 
   ['header-avatar', 'sidebar-avatar'].forEach(id => {
-    document.getElementById(id).textContent = initials;
+    const el = document.getElementById(id);
+    if (el) el.textContent = initials;
   });
-  document.getElementById('header-name').textContent   = currentUser.nama;
-  document.getElementById('sidebar-name').textContent  = currentUser.nama;
-  document.getElementById('header-role').textContent   = role;
-  document.getElementById('sidebar-role').textContent  = role;
+  const hn = document.getElementById('header-name');
+  if (hn) hn.textContent = currentUser.nama;
+  const sn = document.getElementById('sidebar-name');
+  if (sn) sn.textContent = currentUser.nama;
+  const he = document.getElementById('header-email');
+  if (he) he.textContent = currentUser.email;
+  const sr = document.getElementById('sidebar-role');
+  if (sr) sr.textContent = role;
 
   // Role-based menu visibility
-  // pk: only reporting
-  // cs-cc: complaint + reporting
-  // admin: all
   const navComplaint = document.getElementById('nav-complaint');
   const navUsers     = document.getElementById('nav-users');
 
   if (role === 'pk') {
-    navComplaint.classList.add('hidden');
+    if (navComplaint) navComplaint.classList.add('hidden');
+    if (navUsers) navUsers.classList.add('hidden');
     switchView('reporting');
   } else if (role === 'admin') {
-    navUsers.classList.remove('hidden');
+    if (navUsers) navUsers.classList.remove('hidden');
+    if (navComplaint) navComplaint.classList.remove('hidden');
     switchView('complaint');
   } else {
-    // cs-cc
+    // cs-cc or cs
+    if (navUsers) navUsers.classList.add('hidden');
+    if (navComplaint) navComplaint.classList.remove('hidden');
     switchView('complaint');
   }
 
-  // Show app, hide login
-  document.getElementById('login-screen').classList.add('hidden');
-  document.getElementById('app-shell').classList.remove('hidden');
-  document.getElementById('app-shell').classList.add('flex');
+  // Hide auth screen, show app
+  const authScreen = document.getElementById('auth-screen');
+  if (authScreen) authScreen.classList.add('hidden');
+  const appShell = document.getElementById('app-shell');
+  if (appShell) {
+    appShell.classList.remove('hidden');
+    appShell.classList.add('flex');
+  }
 
   // Load product data for complaint form
   if (role !== 'pk') loadProductData();
-}
-
-function handleLogout() {
-  currentUser = null;
-  document.getElementById('app-shell').classList.add('hidden');
-  document.getElementById('app-shell').classList.remove('flex');
-  document.getElementById('login-screen').classList.remove('hidden');
-  document.getElementById('login-nik').value  = '';
-  document.getElementById('login-nama').value = '';
-  document.getElementById('login-error').classList.add('hidden');
 }
 
 // ─────────────────────────────────────────────────────────────

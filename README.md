@@ -43,6 +43,9 @@
 - Sheets: `users`, `complaints`, `mapping`, `product`, `report`, `copy-writing`, `user-matrix`
 
 ### Catatan
-- Login menggunakan **NIK** + **Nama Lengkap** (case-insensitive)
+- Autentikasi otomatis menggunakan **Profil Akun Google Chrome (SSO)** yang dicocokkan dengan sheet `users`
+- Ticket ID berformat `SC-00000` auto-increment
+- Priority dipilih secara manual (dropdown Low / Normal / High)
 - Setelah complaint disubmit, email otomatis terkirim ke nasabah & PIC
 - Code ID, SLA, Classification, Reason, PIC → **auto-filled** berdasarkan mapping
+
