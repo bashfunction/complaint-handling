@@ -358,11 +358,25 @@ function handleSubCatChange() {
     setAutoFilled('f-reason',         mapping['Reason']);
     setAutoFilled('f-pic',            mapping['PIC']);
 
-    // Try to find email of the PIC from users sheet
-    // We'll set a placeholder; actual PIC email lookup happens server-side
-    // but we can let user override
-    document.getElementById('f-email-pic').value = '';
-    document.getElementById('f-email-pic').placeholder = `Email untuk PIC: ${mapping['PIC'] || ''}`;
+    // Auto-fill Email PIC from users sheet based on PIC column
+    const targetPic = String(mapping['PIC'] || '').trim().toLowerCase();
+    let picEmail = '';
+    if (targetPic && productData.picUsers && productData.picUsers.length) {
+      // 1. Exact match on user.pic
+      const matchedUser = productData.picUsers.find(u =>
+        String(u.pic || '').trim().toLowerCase() === targetPic ||
+        String(u.nama || '').trim().toLowerCase() === targetPic
+      );
+      if (matchedUser && matchedUser.email) {
+        picEmail = matchedUser.email;
+      }
+    }
+
+    const emailPicEl = document.getElementById('f-email-pic');
+    if (emailPicEl) {
+      emailPicEl.value = picEmail;
+      emailPicEl.placeholder = picEmail ? picEmail : (targetPic ? `Email untuk PIC: ${mapping['PIC']}` : 'Email PIC');
+    }
   }
 }
 

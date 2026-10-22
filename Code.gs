@@ -260,13 +260,21 @@ function getProductData() {
     const subCategories      = [...new Set(productRows.map(r => r['Sub Category']).filter(Boolean))];
     const priorities         = [...new Set(productRows.map(r => r['Priority']).filter(Boolean))];
 
+    const userRows = sheetToObjects(getSheet(SHEET_USERS));
+    const picUsers = userRows.map(u => ({
+      nama: u.nama || '',
+      email: u.email || '',
+      pic: u.pic || ''
+    }));
+
     return {
       success: true,
       productCategories,
       complaintCategories,
       subCategories,
       priorities,
-      mappingData: mappingRows
+      mappingData: mappingRows,
+      picUsers
     };
   } catch (err) {
     return { success: false, message: err.message };
