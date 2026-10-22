@@ -1,0 +1,864 @@
+<script>
+// ═══════════════════════════════════════════════════════════
+// JavaScript.html — Client-side Logic
+// Complaint Handling App | Nanobank Syariah
+// ═══════════════════════════════════════════════════════════
+
+// ── Global State ──────────────────────────────────────────
+let currentUser   = null;
+let productData   = null; // { productCategories, complaintCategories, subCategories, mappingData }
+let allReportData = [];
+let filteredReportData = [];
+let allUserData   = [];
+let deleteTargetNik = null;
+
+const REPORT_COLUMNS = [
+  'Case ID',
+  'Create Date/Time',
+  'SLA',
+  'monitor by',
+  'Account Name',
+  'Code Id Sub-Category',
+  'Sub Category',
+  'Created by',
+  'Product Category',
+  'Category',
+  'Complaint Handling Status',
+  'CurrentPIC',
+  'emailPIC',
+  'CIF',
+  'Account Number',
+  'Classification',
+  'Reason',
+  'Date Completed',
+  'Due Date',
+  'nominal',
+  'tanggal transaksi',
+  'Description Report',
+  'Location and Merchant Name',
+  'CompleteDay'
+];
+let reportHeaders = [...REPORT_COLUMNS];
+
+// ── Utility: Show/Hide Loader ──────────────────────────────
+function showLoader(text) {
+  document.getElementById('loader-text').textContent = text || 'Memuat data...';
+  document.getElementById('global-loader').classList.remove('hidden');
+}
+function hideLoader() {
+  document.getElementById('global-loader').classList.add('hidden');
+}
+
+// ── Utility: Toast ─────────────────────────────────────────
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toast-container');
+  const icons = { success: 'check_circle', error: 'error', info: 'info' };
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `<span class="material-symbols-outlined text-xl shrink-0">${icons[type] || 'info'}</span><span>${message}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('toast-out');
+    toast.addEventListener('animationend', () => toast.remove());
+  }, 3500);
+}
+
+// ── Utility: Escaping & Formatting ────────────────────────
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatCurrency(val) {
+  if (val === '' || val === null || val === undefined) return '—';
+  const clean = String(val).replace(/[^0-9.-]/g, '');
+  const num = Number(clean);
+  if (isNaN(num) || clean === '') return String(val) || '—';
+  return 'Rp ' + num.toLocaleString('id-ID');
+}
+
+// ── Utility: Initials ──────────────────────────────────────
+function getInitials(name) {
+  if (!name) return '??';
+  return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+}
+
+// ─────────────────────────────────────────────────────────────
+// AUTH
+// ─────────────────────────────────────────────────────────────
+function handleLogin(e) {
+  e.preventDefault();
+  const nik  = document.getElementById('login-nik').value.trim();
+  const nama = document.getElementById('login-nama').value.trim();
+  if (!nik || !nama) return;
+
+  const btn      = document.getElementById('login-btn');
+  const btnIcon  = document.getElementById('login-btn-icon');
+  const btnText  = document.getElementById('login-btn-text');
+  btn.disabled   = true;
+  btnIcon.classList.add('animate-spin');
+  btnText.textContent = 'Memverifikasi...';
+  document.getElementById('login-error').classList.add('hidden');
+
+  google.script.run
+    .withSuccessHandler(result => {
+      btn.disabled = false;
+      btnIcon.classList.remove('animate-spin');
+      btnText.textContent = 'Masuk';
+
+      if (result.success) {
+        currentUser = result.user;
+        initApp();
+      } else {
+        document.getElementById('login-error-msg').textContent = result.message;
+        document.getElementById('login-error').classList.remove('hidden');
+      }
+    })
+    .withFailureHandler(err => {
+      btn.disabled = false;
+      btnIcon.classList.remove('animate-spin');
+      btnText.textContent = 'Masuk';
+      document.getElementById('login-error-msg').textContent = 'Terjadi kesalahan. Coba lagi.';
+      document.getElementById('login-error').classList.remove('hidden');
+    })
+    .loginUser(nik, nama);
+}
+
+function initApp() {
+  // Update header & sidebar
+  const initials = getInitials(currentUser.nama);
+  const role     = (currentUser.role || '').toLowerCase();
+
+  ['header-avatar', 'sidebar-avatar'].forEach(id => {
+    document.getElementById(id).textContent = initials;
+  });
+  document.getElementById('header-name').textContent   = currentUser.nama;
+  document.getElementById('sidebar-name').textContent  = currentUser.nama;
+  document.getElementById('header-role').textContent   = role;
+  document.getElementById('sidebar-role').textContent  = role;
+
+  // Role-based menu visibility
+  // pk: only reporting
+  // cs-cc: complaint + reporting
+  // admin: all
+  const navComplaint = document.getElementById('nav-complaint');
+  const navUsers     = document.getElementById('nav-users');
+
+  if (role === 'pk') {
+    navComplaint.classList.add('hidden');
+    switchView('reporting');
+  } else if (role === 'admin') {
+    navUsers.classList.remove('hidden');
+    switchView('complaint');
+  } else {
+    // cs-cc
+    switchView('complaint');
+  }
+
+  // Show app, hide login
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app-shell').classList.remove('hidden');
+  document.getElementById('app-shell').classList.add('flex');
+
+  // Load product data for complaint form
+  if (role !== 'pk') loadProductData();
+}
+
+function handleLogout() {
+  currentUser = null;
+  document.getElementById('app-shell').classList.add('hidden');
+  document.getElementById('app-shell').classList.remove('flex');
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('login-nik').value  = '';
+  document.getElementById('login-nama').value = '';
+  document.getElementById('login-error').classList.add('hidden');
+}
+
+// ─────────────────────────────────────────────────────────────
+// SIDEBAR & NAVIGATION
+// ─────────────────────────────────────────────────────────────
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const icon    = document.getElementById('toggle-icon');
+  const isExpanded = sidebar.classList.contains('sidebar-expanded');
+  sidebar.classList.toggle('sidebar-expanded', !isExpanded);
+  sidebar.classList.toggle('sidebar-collapsed', isExpanded);
+  icon.textContent = isExpanded ? 'menu' : 'menu_open';
+}
+
+function switchView(view) {
+  // Views and matching nav buttons
+  const views = ['complaint', 'reporting', 'users'];
+  views.forEach(v => {
+    const section = document.getElementById(`view-${v}`);
+    const btn     = document.getElementById(`nav-${v}`);
+    if (section) section.classList.toggle('hidden', v !== view);
+    if (btn) {
+      btn.classList.toggle('nav-item-active', v === view);
+      const icon = btn.querySelector('.material-symbols-outlined');
+      if (icon) {
+        if (v === view) {
+          icon.classList.remove('text-slate-400');
+        } else {
+          icon.classList.add('text-slate-400');
+        }
+      }
+      if (v !== view) {
+        btn.classList.add('text-slate-700', 'hover:bg-slate-100', 'hover:text-nano-blue');
+        btn.classList.remove('text-white');
+      } else {
+        btn.classList.remove('text-slate-700', 'hover:bg-slate-100', 'hover:text-nano-blue');
+      }
+    }
+  });
+
+  // Update header
+  const titles = { complaint: 'Input Complaint', reporting: 'Reporting', users: 'Manajemen User' };
+  document.getElementById('page-title').textContent = titles[view] || '';
+  document.getElementById('breadcrumb').textContent = 'Complaint Handling › ' + (titles[view] || '');
+
+  // Side effects
+  if (view === 'reporting') loadReportData();
+  if (view === 'users')     loadUsers();
+}
+
+// ─────────────────────────────────────────────────────────────
+// COMPLAINT FORM
+// ─────────────────────────────────────────────────────────────
+function loadProductData() {
+  google.script.run
+    .withSuccessHandler(result => {
+      if (!result.success) { showToast('Gagal memuat data produk: ' + result.message, 'error'); return; }
+      productData = result;
+      populateProductCategoryDropdown();
+    })
+    .withFailureHandler(err => showToast('Gagal memuat data produk', 'error'))
+    .getProductData();
+}
+
+function populateProductCategoryDropdown() {
+  const sel = document.getElementById('f-product-cat');
+  sel.innerHTML = '<option value="">-- Pilih --</option>';
+  (productData.productCategories || []).forEach(cat => {
+    const opt = document.createElement('option');
+    opt.value = cat;
+    opt.textContent = cat;
+    sel.appendChild(opt);
+  });
+}
+
+function handleProductCatChange() {
+  const productCat = document.getElementById('f-product-cat').value;
+  const ccSel = document.getElementById('f-complaint-cat');
+  const subSel = document.getElementById('f-sub-cat');
+
+  ccSel.innerHTML = '<option value="">-- Pilih --</option>';
+  subSel.innerHTML = '<option value="">-- Pilih Category dulu --</option>';
+  ccSel.disabled = true;
+  subSel.disabled = true;
+  clearAutoFilled();
+
+  if (!productCat || !productData) return;
+
+  // Filter categories valid for this product from mappingData
+  const cats = [...new Set(
+    productData.mappingData
+      .filter(m => m['Product Category'] === productCat)
+      .map(m => m['Category'])
+      .filter(Boolean)
+  )];
+
+  cats.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    ccSel.appendChild(opt);
+  });
+  ccSel.disabled = false;
+}
+
+function handleComplaintCatChange() {
+  const productCat   = document.getElementById('f-product-cat').value;
+  const complaintCat = document.getElementById('f-complaint-cat').value;
+  const subSel = document.getElementById('f-sub-cat');
+
+  subSel.innerHTML = '<option value="">-- Pilih --</option>';
+  subSel.disabled  = true;
+  clearAutoFilled();
+
+  if (!complaintCat || !productData) return;
+
+  const subs = [...new Set(
+    productData.mappingData
+      .filter(m => m['Product Category'] === productCat && m['Category'] === complaintCat)
+      .map(m => m['Sub Category'])
+      .filter(Boolean)
+  )];
+
+  subs.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s; opt.textContent = s;
+    subSel.appendChild(opt);
+  });
+  subSel.disabled = false;
+}
+
+function handleSubCatChange() {
+  const productCat   = document.getElementById('f-product-cat').value;
+  const complaintCat = document.getElementById('f-complaint-cat').value;
+  const subCat       = document.getElementById('f-sub-cat').value;
+
+  clearAutoFilled();
+  if (!subCat || !productData) return;
+
+  const mapping = productData.mappingData.find(
+    m => m['Product Category'] === productCat &&
+         m['Category'] === complaintCat &&
+         m['Sub Category'] === subCat
+  );
+
+  if (mapping) {
+    setAutoFilled('f-code-id',        mapping['Code ID*']);
+    setAutoFilled('f-sla',            mapping['SLA']);
+    setAutoFilled('f-classification', mapping['Default Classification']);
+    setAutoFilled('f-reason',         mapping['Reason']);
+    setAutoFilled('f-pic',            mapping['PIC']);
+
+    // Try to find email of the PIC from users sheet
+    // We'll set a placeholder; actual PIC email lookup happens server-side
+    // but we can let user override
+    document.getElementById('f-email-pic').value = '';
+    document.getElementById('f-email-pic').placeholder = `Email untuk PIC: ${mapping['PIC'] || ''}`;
+
+    // Priority: derive from mappingData SLA
+    const slaVal = Number(mapping['SLA']);
+    let priority = 'Normal';
+    if (slaVal <= 3)  priority = 'High';
+    else if (slaVal <= 10) priority = 'Normal';
+    else priority = 'Low';
+    setAutoFilled('f-priority', priority);
+  }
+}
+
+function setAutoFilled(id, value) {
+  const el = document.getElementById(id);
+  if (el) { el.value = value || ''; }
+}
+
+function clearAutoFilled() {
+  ['f-code-id', 'f-sla', 'f-classification', 'f-reason', 'f-pic', 'f-priority'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('f-email-pic').value = '';
+  document.getElementById('f-email-pic').placeholder = 'Email PIC';
+}
+
+function resetComplaintForm() {
+  document.getElementById('complaint-form').reset();
+  clearAutoFilled();
+  // Reset dropdowns
+  document.getElementById('f-complaint-cat').innerHTML = '<option value="">-- Pilih Product Category dulu --</option>';
+  document.getElementById('f-complaint-cat').disabled = true;
+  document.getElementById('f-sub-cat').innerHTML = '<option value="">-- Pilih Category dulu --</option>';
+  document.getElementById('f-sub-cat').disabled = true;
+}
+
+function handleComplaintSubmit(e) {
+  e.preventDefault();
+  const formData = {
+    productCategory:       document.getElementById('f-product-cat').value,
+    complaintCategory:     document.getElementById('f-complaint-cat').value,
+    subCategory:           document.getElementById('f-sub-cat').value,
+    codeId:                document.getElementById('f-code-id').value,
+    sla:                   document.getElementById('f-sla').value,
+    priority:              document.getElementById('f-priority').value,
+    classification:        document.getElementById('f-classification').value,
+    reason:                document.getElementById('f-reason').value,
+    pic:                   document.getElementById('f-pic').value,
+    emailPic:              document.getElementById('f-email-pic').value,
+    name:                  document.getElementById('f-name').value,
+    emailAddress:          document.getElementById('f-email').value,
+    phoneNumber:           document.getElementById('f-phone').value,
+    accountNumber:         document.getElementById('f-account-number').value,
+    atmCardNumber:         document.getElementById('f-atm-card').value,
+    dateTransaction:       document.getElementById('f-date-trx').value,
+    transactionAmount1:    document.getElementById('f-amount1').value,
+    transactionAmount2:    document.getElementById('f-amount2').value,
+    destinationPhoneNumber: document.getElementById('f-dest-phone').value,
+    providerName:          document.getElementById('f-provider').value,
+    description:           document.getElementById('f-description').value,
+    createdBy:             currentUser ? currentUser.nama : ''
+  };
+
+  const submitBtn = document.getElementById('complaint-submit-btn');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<div class="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div><span>Menyimpan...</span>';
+
+  showLoader('Menyimpan complaint & mengirim email...');
+
+  google.script.run
+    .withSuccessHandler(result => {
+      hideLoader();
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<span class="material-symbols-outlined text-base text-nano-green">send</span>Submit & Kirim Email';
+
+      if (result.success) {
+        document.getElementById('modal-ticket-id').textContent = result.ticketId;
+        document.getElementById('success-modal').classList.remove('hidden');
+        resetComplaintForm();
+      } else {
+        showToast('Gagal: ' + result.message, 'error');
+      }
+    })
+    .withFailureHandler(err => {
+      hideLoader();
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<span class="material-symbols-outlined text-base text-nano-green">send</span>Submit & Kirim Email';
+      showToast('Terjadi kesalahan server. Coba lagi.', 'error');
+    })
+    .submitComplaint(formData);
+}
+
+function closeSuccessModal() {
+  document.getElementById('success-modal').classList.add('hidden');
+}
+
+// ─────────────────────────────────────────────────────────────
+// REPORTING
+// ─────────────────────────────────────────────────────────────
+function loadReportData() {
+  showLoader('Memuat data reporting...');
+  google.script.run
+    .withSuccessHandler(result => {
+      hideLoader();
+      if (!result.success) { showToast('Gagal memuat reporting: ' + result.message, 'error'); return; }
+      if (result.headers && result.headers.length > 0) {
+        reportHeaders = result.headers;
+        renderReportHeaders(reportHeaders);
+      }
+      allReportData = result.data || [];
+      filteredReportData = [...allReportData];
+      renderReportTable(filteredReportData, reportHeaders);
+      updateReportStats(allReportData);
+    })
+    .withFailureHandler(err => {
+      hideLoader();
+      showToast('Gagal memuat data reporting', 'error');
+    })
+    .getReportData();
+}
+
+function renderReportHeaders(headers) {
+  const theadRow = document.getElementById('report-thead-row');
+  if (!theadRow || !headers || headers.length === 0) return;
+  theadRow.innerHTML = headers.map(h => `<th class="whitespace-nowrap">${escapeHtml(h)}</th>`).join('');
+}
+
+function updateReportStats(data) {
+  document.getElementById('stat-total').textContent    = data.length;
+  document.getElementById('stat-open').textContent     = data.filter(r => (r['Complaint Handling Status'] || '').toLowerCase() === 'open').length;
+  document.getElementById('stat-progress').textContent = data.filter(r => (r['Complaint Handling Status'] || '').toLowerCase() === 'in progress').length;
+  document.getElementById('stat-closed').textContent   = data.filter(r => (r['Complaint Handling Status'] || '').toLowerCase() === 'closed').length;
+}
+
+function filterReportTable() {
+  const search = (document.getElementById('report-search').value || '').toLowerCase().trim();
+  const status = document.getElementById('report-filter-status').value;
+
+  filteredReportData = allReportData.filter(r => {
+    const matchStatus = !status || (r['Complaint Handling Status'] || '').toLowerCase() === status.toLowerCase();
+    if (!matchStatus) return false;
+    if (!search) return true;
+
+    return Object.values(r).some(val =>
+      String(val || '').toLowerCase().includes(search)
+    );
+  });
+
+  renderReportTable(filteredReportData, reportHeaders);
+}
+
+function renderReportCell(colName, r) {
+  const norm = colName.trim().toLowerCase();
+  const rawVal = r[colName] !== undefined ? r[colName] : (r[colName.trim()] !== undefined ? r[colName.trim()] : '');
+
+  if (norm === 'case id') {
+    return `<td><span class="font-mono font-bold text-nano-blue text-xs whitespace-nowrap">${escapeHtml(rawVal || '—')}</span></td>`;
+  }
+  if (norm === 'complaint handling status') {
+    const status = String(rawVal || 'Open');
+    const chipClass = status.toLowerCase() === 'closed' ? 'chip-closed'
+                    : status.toLowerCase() === 'in progress' ? 'chip-progress'
+                    : status.toLowerCase() === 'open' ? 'chip-open'
+                    : 'chip-overdue';
+    return `<td><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${chipClass}">${escapeHtml(status)}</span></td>`;
+  }
+  if (norm === 'create date/time') {
+    return `<td class="text-xs text-slate-600 whitespace-nowrap">${formatDate(rawVal, true)}</td>`;
+  }
+  if (norm === 'due date' || norm === 'date completed' || norm === 'tanggal transaksi') {
+    return `<td class="text-xs text-slate-600 whitespace-nowrap">${formatDate(rawVal, false)}</td>`;
+  }
+  if (norm === 'nominal') {
+    return `<td class="text-xs font-mono font-semibold text-slate-700 whitespace-nowrap">${formatCurrency(rawVal)}</td>`;
+  }
+  if (norm === 'sla') {
+    return `<td class="text-xs text-center font-semibold text-slate-700 whitespace-nowrap">${rawVal ? escapeHtml(rawVal) + ' HK' : '—'}</td>`;
+  }
+  if (norm === 'account name') {
+    return `<td class="text-xs font-semibold text-slate-800 whitespace-nowrap">${escapeHtml(rawVal || '—')}</td>`;
+  }
+  if (norm === 'sub category' || norm === 'reason' || norm === 'description report') {
+    return `<td class="text-xs text-slate-600 max-w-[200px] truncate" title="${escapeHtml(rawVal || '')}">${escapeHtml(rawVal || '—')}</td>`;
+  }
+  if (norm === 'account number' || norm === 'code id sub-category' || norm === 'cif' || norm === 'emailpic') {
+    return `<td class="text-xs font-mono text-slate-700 whitespace-nowrap">${escapeHtml(rawVal || '—')}</td>`;
+  }
+  return `<td class="text-xs text-slate-700 whitespace-nowrap">${escapeHtml(rawVal || '—')}</td>`;
+}
+
+function renderReportTable(data, headers) {
+  const tbody = document.getElementById('report-tbody');
+  const cols = (headers && headers.length > 0) ? headers : REPORT_COLUMNS;
+  const colCount = cols.length || 24;
+
+  if (!data || data.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="${colCount}" class="text-center py-12 text-slate-400 font-medium">
+      <span class="material-symbols-outlined text-4xl block mb-2 mx-auto text-slate-300">inbox</span>
+      Belum ada data complaint
+    </td></tr>`;
+    document.getElementById('report-info').textContent = '0 data ditemukan';
+    return;
+  }
+
+  tbody.innerHTML = data.map((r, idx) => {
+    const cells = cols.map(col => renderReportCell(col, r)).join('');
+    return `<tr onclick="openReportDetailModal(${idx})" class="cursor-pointer hover:bg-slate-50 transition-colors" title="Klik untuk lihat rincian">
+      ${cells}
+    </tr>`;
+  }).join('');
+
+  document.getElementById('report-info').textContent = `${data.length} data ditampilkan`;
+}
+
+function openReportDetailModal(idx) {
+  const r = filteredReportData && filteredReportData[idx] ? filteredReportData[idx] : allReportData[idx];
+  if (!r) return;
+
+  document.getElementById('detail-modal-case-id').textContent = r['Case ID'] || '—';
+
+  const status = r['Complaint Handling Status'] || 'Open';
+  const chipClass = status.toLowerCase() === 'closed' ? 'chip-closed'
+                  : status.toLowerCase() === 'in progress' ? 'chip-progress'
+                  : status.toLowerCase() === 'open' ? 'chip-open'
+                  : 'chip-overdue';
+
+  const modalBody = document.getElementById('detail-modal-body');
+  modalBody.innerHTML = `
+    <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+      <div>
+        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Status Handling</p>
+        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold mt-1 ${chipClass}">${escapeHtml(status)}</span>
+      </div>
+      <div class="text-right">
+        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">SLA &amp; Due Date</p>
+        <p class="font-semibold text-slate-700 mt-1">${r['SLA'] ? escapeHtml(r['SLA']) + ' Hari Kerja' : '—'} &bull; <span class="text-slate-500">${formatDate(r['Due Date'])}</span></p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3 pt-1">
+      <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+        <p class="text-[10px] text-slate-400 font-bold uppercase">Account Name</p>
+        <p class="font-bold text-slate-800 text-sm mt-0.5">${escapeHtml(r['Account Name'] || '—')}</p>
+      </div>
+      <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+        <p class="text-[10px] text-slate-400 font-bold uppercase">Account Number / CIF</p>
+        <p class="font-mono font-bold text-slate-800 text-sm mt-0.5">${escapeHtml(r['Account Number'] || '—')} ${r['CIF'] ? `<span class="text-slate-500 font-normal">(${escapeHtml(r['CIF'])})</span>` : ''}</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3">
+      <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+        <p class="text-[10px] text-slate-400 font-bold uppercase">Product Category</p>
+        <p class="font-semibold text-slate-700 mt-0.5">${escapeHtml(r['Product Category'] || '—')}</p>
+      </div>
+      <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+        <p class="text-[10px] text-slate-400 font-bold uppercase">Category</p>
+        <p class="font-semibold text-slate-700 mt-0.5">${escapeHtml(r['Category'] || r[' Category'] || '—')}</p>
+      </div>
+      <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+        <p class="text-[10px] text-slate-400 font-bold uppercase">Code ID</p>
+        <p class="font-mono font-bold text-slate-700 mt-0.5">${escapeHtml(r['Code Id Sub-Category'] || '—')}</p>
+      </div>
+    </div>
+
+    <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+      <p class="text-[10px] text-slate-400 font-bold uppercase">Sub Category</p>
+      <p class="font-semibold text-slate-800 mt-0.5">${escapeHtml(r['Sub Category'] || '—')}</p>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+        <p class="text-[10px] text-slate-400 font-bold uppercase">Classification</p>
+        <p class="font-medium text-slate-700 mt-0.5">${escapeHtml(r['Classification'] || '—')}</p>
+      </div>
+      <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+        <p class="text-[10px] text-slate-400 font-bold uppercase">Reason</p>
+        <p class="font-medium text-slate-700 mt-0.5">${escapeHtml(r['Reason'] || '—')}</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3">
+      <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+        <p class="text-[10px] text-slate-400 font-bold uppercase">Nominal Transaksi</p>
+        <p class="font-mono font-bold text-slate-800 mt-0.5">${formatCurrency(r['nominal'])}</p>
+      </div>
+      <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+        <p class="text-[10px] text-slate-400 font-bold uppercase">Tanggal Transaksi</p>
+        <p class="font-medium text-slate-700 mt-0.5">${formatDate(r['tanggal transaksi'])}</p>
+      </div>
+      <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+        <p class="text-[10px] text-slate-400 font-bold uppercase">Location / Merchant</p>
+        <p class="font-medium text-slate-700 mt-0.5">${escapeHtml(r['Location and Merchant Name'] || '—')}</p>
+      </div>
+    </div>
+
+    <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+      <p class="text-[10px] text-slate-400 font-bold uppercase">Description Report</p>
+      <p class="font-medium text-slate-700 mt-1 whitespace-pre-wrap leading-relaxed">${escapeHtml(r['Description Report'] || '—')}</p>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 pt-1">
+      <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+        <p class="text-[10px] text-slate-400 font-bold uppercase">Current PIC</p>
+        <p class="font-semibold text-slate-800 mt-0.5">${escapeHtml(r['CurrentPIC'] || '—')}</p>
+      </div>
+      <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+        <p class="text-[10px] text-slate-400 font-bold uppercase">Email PIC</p>
+        <p class="font-mono text-slate-700 mt-0.5 truncate" title="${escapeHtml(r['emailPIC'] || '')}">${escapeHtml(r['emailPIC'] || '—')}</p>
+      </div>
+      <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+        <p class="text-[10px] text-slate-400 font-bold uppercase">Created by</p>
+        <p class="font-semibold text-slate-700 mt-0.5">${escapeHtml(r['Created by'] || '—')}</p>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('report-detail-modal').classList.remove('hidden');
+}
+
+function closeReportDetailModal() {
+  document.getElementById('report-detail-modal').classList.add('hidden');
+}
+
+function formatDate(val, includeTime = false) {
+  if (!val) return '—';
+  try {
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return String(val);
+    const options = { day: '2-digit', month: 'short', year: 'numeric' };
+    if (includeTime) {
+      options.hour = '2-digit';
+      options.minute = '2-digit';
+    }
+    return d.toLocaleDateString('id-ID', options);
+  } catch { return String(val); }
+}
+
+// ─────────────────────────────────────────────────────────────
+// USER MANAGEMENT
+// ─────────────────────────────────────────────────────────────
+function loadUsers() {
+  showLoader('Memuat data user...');
+  google.script.run
+    .withSuccessHandler(result => {
+      hideLoader();
+      if (!result.success) { showToast('Gagal memuat user: ' + result.message, 'error'); return; }
+      allUserData = result.data || [];
+      renderUserTable(allUserData);
+    })
+    .withFailureHandler(err => {
+      hideLoader();
+      showToast('Gagal memuat data user', 'error');
+    })
+    .getUsers();
+}
+
+function filterUserTable() {
+  const search = document.getElementById('user-search').value.toLowerCase();
+  const filtered = allUserData.filter(u =>
+    (u['nik']   || '').toLowerCase().includes(search) ||
+    (u['nama']  || '').toLowerCase().includes(search) ||
+    (u['email'] || '').toLowerCase().includes(search) ||
+    (u['role']  || '').toLowerCase().includes(search)
+  );
+  renderUserTable(filtered);
+}
+
+function renderUserTable(data) {
+  const tbody = document.getElementById('user-tbody');
+  if (!data || data.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-12 text-slate-400 font-medium">
+      <span class="material-symbols-outlined text-4xl block mb-2 mx-auto text-slate-300">group</span>
+      Belum ada data user
+    </td></tr>`;
+    document.getElementById('user-info').textContent = '0 user';
+    return;
+  }
+
+  const roleColors = {
+    admin: 'bg-nano-blue/10 text-nano-blue border border-nano-blue/20',
+    'cs-cc': 'bg-green-100 text-green-700 border border-green-200',
+    'cs': 'bg-green-100 text-green-700 border border-green-200',
+    pk: 'bg-purple-100 text-purple-700 border border-purple-200'
+  };
+
+  tbody.innerHTML = data.map(u => {
+    const role = (u['role'] || '').toLowerCase();
+    const chipCls = roleColors[role] || 'bg-slate-100 text-slate-700 border border-slate-200';
+    return `<tr>
+      <td><span class="font-mono font-bold text-xs text-nano-blue">${u['nik'] || '—'}</span></td>
+      <td class="font-semibold">${u['nama'] || '—'}</td>
+      <td class="text-xs text-slate-600">${u['email'] || '—'}</td>
+      <td><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${chipCls}">${u['role'] || '—'}</span></td>
+      <td class="text-xs text-slate-600">${u['pic'] || '—'}</td>
+      <td class="text-center">
+        <div class="flex items-center justify-center gap-1.5">
+          <button onclick='openUserModal(${JSON.stringify(u)})'
+            class="p-1.5 rounded-lg text-slate-500 hover:bg-nano-blue/10 hover:text-nano-blue transition-colors" title="Edit">
+            <span class="material-symbols-outlined text-base">edit</span>
+          </button>
+          <button onclick="openDeleteModal('${u['nik']}', '${escapeQuotes(u['nama'])}')"
+            class="p-1.5 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors" title="Hapus">
+            <span class="material-symbols-outlined text-base">delete</span>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('user-info').textContent = `${data.length} user terdaftar`;
+}
+
+function escapeQuotes(str) {
+  return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+function openUserModal(userData) {
+  document.getElementById('um-error').classList.add('hidden');
+  const form = document.getElementById('user-form');
+  form.reset();
+
+  if (userData) {
+    // Edit mode
+    document.getElementById('user-modal-title').textContent = 'Edit User';
+    document.getElementById('um-mode').value   = 'edit';
+    document.getElementById('um-nik').value    = userData.nik || '';
+    document.getElementById('um-nik').readOnly = true;
+    document.getElementById('um-nama').value   = userData.nama || '';
+    document.getElementById('um-email').value  = userData.email || '';
+    document.getElementById('um-role').value   = userData.role || '';
+    document.getElementById('um-pic').value    = userData.pic || '';
+    document.getElementById('um-submit-text').textContent = 'Update';
+  } else {
+    // Add mode
+    document.getElementById('user-modal-title').textContent = 'Tambah User';
+    document.getElementById('um-mode').value   = 'add';
+    document.getElementById('um-nik').readOnly = false;
+    document.getElementById('um-submit-text').textContent = 'Simpan';
+  }
+
+  document.getElementById('user-modal').classList.remove('hidden');
+}
+
+function closeUserModal() {
+  document.getElementById('user-modal').classList.add('hidden');
+}
+
+function handleUserFormSubmit(e) {
+  e.preventDefault();
+  const mode = document.getElementById('um-mode').value;
+  const userData = {
+    nik:   document.getElementById('um-nik').value.trim(),
+    nama:  document.getElementById('um-nama').value.trim(),
+    email: document.getElementById('um-email').value.trim(),
+    role:  document.getElementById('um-role').value,
+    pic:   document.getElementById('um-pic').value.trim()
+  };
+
+  const submitBtn = document.getElementById('um-submit-btn');
+  submitBtn.disabled = true;
+  document.getElementById('um-error').classList.add('hidden');
+
+  const fn = mode === 'edit' ? 'updateUser' : 'addUser';
+
+  google.script.run
+    .withSuccessHandler(result => {
+      submitBtn.disabled = false;
+      if (result.success) {
+        closeUserModal();
+        showToast(result.message, 'success');
+        loadUsers();
+      } else {
+        document.getElementById('um-error-msg').textContent = result.message;
+        document.getElementById('um-error').classList.remove('hidden');
+      }
+    })
+    .withFailureHandler(err => {
+      submitBtn.disabled = false;
+      document.getElementById('um-error-msg').textContent = 'Terjadi kesalahan server.';
+      document.getElementById('um-error').classList.remove('hidden');
+    })
+    [fn](userData);
+}
+
+function openDeleteModal(nik, nama) {
+  deleteTargetNik = nik;
+  document.getElementById('delete-target-name').textContent = `${nama} (NIK: ${nik})`;
+  document.getElementById('delete-modal').classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+  deleteTargetNik = null;
+  document.getElementById('delete-modal').classList.add('hidden');
+}
+
+function confirmDeleteUser() {
+  if (!deleteTargetNik) return;
+  const btn = document.getElementById('delete-confirm-btn');
+  btn.disabled = true;
+
+  google.script.run
+    .withSuccessHandler(result => {
+      btn.disabled = false;
+      closeDeleteModal();
+      if (result.success) {
+        showToast(result.message, 'success');
+        loadUsers();
+      } else {
+        showToast('Gagal: ' + result.message, 'error');
+      }
+    })
+    .withFailureHandler(err => {
+      btn.disabled = false;
+      closeDeleteModal();
+      showToast('Terjadi kesalahan server.', 'error');
+    })
+    .deleteUser(deleteTargetNik);
+}
+
+// ─── Close modals on backdrop click ──────────────────────────
+['success-modal', 'user-modal', 'delete-modal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', function(e) {
+    if (e.target === this) {
+      this.classList.add('hidden');
+      if (id === 'delete-modal') deleteTargetNik = null;
+    }
+  });
+});
+</script>

@@ -1,0 +1,190 @@
+<!-- ═══════════════════════════════════════════════
+     VIEW: USER MANAGEMENT
+════════════════════════════════════════════════ -->
+
+<!-- Header + Add Button -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+  <div class="flex items-center gap-3">
+    <div class="w-10 h-10 rounded-xl bg-nano-blue flex items-center justify-center">
+      <span class="material-symbols-outlined text-nano-green text-2xl">manage_accounts</span>
+    </div>
+    <div>
+      <h2 class="text-base font-bold text-nano-blue">Manajemen User</h2>
+      <p class="text-xs text-slate-500 font-medium">Kelola akun pengguna aplikasi</p>
+    </div>
+  </div>
+  <button onclick="openUserModal()" 
+    class="btn-primary-nano px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-sm">
+    <span class="material-symbols-outlined text-base text-nano-green">person_add</span>
+    Tambah User
+  </button>
+</div>
+
+<!-- User matrix info card -->
+<div class="m3-card p-4 border-l-4 border-l-nano-blue">
+  <p class="text-xs font-bold text-nano-blue mb-2 flex items-center gap-1.5">
+    <span class="material-symbols-outlined text-sm">info</span>
+    Hak Akses Berdasarkan Role
+  </p>
+  <div class="overflow-x-auto">
+    <table class="text-xs w-full">
+      <thead>
+        <tr class="border-b border-slate-200">
+          <th class="text-left pb-1.5 pr-4 font-bold text-slate-700">Role</th>
+          <th class="text-center pb-1.5 px-3 font-bold text-slate-700">Manajemen User</th>
+          <th class="text-center pb-1.5 px-3 font-bold text-slate-700">Input Complaint</th>
+          <th class="text-center pb-1.5 px-3 font-bold text-slate-700">Kirim Email</th>
+          <th class="text-center pb-1.5 px-3 font-bold text-slate-700">Reporting</th>
+        </tr>
+      </thead>
+      <tbody class="text-slate-600">
+        <tr>
+          <td class="py-1 pr-4 font-semibold">admin</td>
+          <td class="text-center px-3"><span class="text-green-600 font-bold">✓</span></td>
+          <td class="text-center px-3"><span class="text-green-600 font-bold">✓</span></td>
+          <td class="text-center px-3"><span class="text-slate-400">—</span></td>
+          <td class="text-center px-3"><span class="text-green-600 font-bold">✓</span></td>
+        </tr>
+        <tr>
+          <td class="py-1 pr-4 font-semibold">cs-cc</td>
+          <td class="text-center px-3"><span class="text-slate-400">—</span></td>
+          <td class="text-center px-3"><span class="text-green-600 font-bold">✓</span></td>
+          <td class="text-center px-3"><span class="text-green-600 font-bold">✓</span></td>
+          <td class="text-center px-3"><span class="text-green-600 font-bold">✓</span></td>
+        </tr>
+        <tr>
+          <td class="py-1 pr-4 font-semibold">pk</td>
+          <td class="text-center px-3"><span class="text-slate-400">—</span></td>
+          <td class="text-center px-3"><span class="text-slate-400">—</span></td>
+          <td class="text-center px-3"><span class="text-slate-400">—</span></td>
+          <td class="text-center px-3"><span class="text-green-600 font-bold">✓</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- User Table -->
+<div class="m3-card overflow-hidden">
+  <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+    <div class="relative max-w-xs w-full">
+      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg pointer-events-none">search</span>
+      <input type="text" id="user-search" oninput="filterUserTable()" placeholder="Cari nama, NIK, role..."
+        class="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-nano-blue/20 focus:border-nano-blue bg-slate-50 transition-all" />
+    </div>
+    <button onclick="loadUsers()" title="Refresh" class="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 transition-all">
+      <span class="material-symbols-outlined text-base">refresh</span>
+    </button>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="data-table" id="user-table">
+      <thead>
+        <tr>
+          <th>NIK</th>
+          <th>Nama</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>PIC Label</th>
+          <th class="text-center">Aksi</th>
+        </tr>
+      </thead>
+      <tbody id="user-tbody">
+        <tr>
+          <td colspan="6" class="text-center py-12 text-slate-400 font-medium">
+            <span class="material-symbols-outlined text-4xl block mb-2 mx-auto text-slate-300">group</span>
+            Memuat data user...
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="p-4 border-t border-slate-100">
+    <p id="user-info" class="text-xs text-slate-500 font-medium">—</p>
+  </div>
+</div>
+
+<!-- ── User Modal ────────────────────────────────────── -->
+<div id="user-modal" class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+  <div class="m3-card p-6 max-w-md w-full animate-scaleIn">
+    <div class="flex items-center justify-between mb-5">
+      <h3 id="user-modal-title" class="text-base font-bold text-nano-blue">Tambah User</h3>
+      <button onclick="closeUserModal()" class="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors">
+        <span class="material-symbols-outlined text-xl">close</span>
+      </button>
+    </div>
+
+    <form id="user-form" onsubmit="handleUserFormSubmit(event)" class="space-y-4">
+      <input type="hidden" id="um-mode" value="add" />
+      <div>
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">NIK <span class="text-red-500">*</span></label>
+        <input type="text" id="um-nik" required placeholder="NIK karyawan"
+          class="field-input" />
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Nama Lengkap <span class="text-red-500">*</span></label>
+        <input type="text" id="um-nama" required placeholder="Nama lengkap"
+          class="field-input" />
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Email <span class="text-red-500">*</span></label>
+        <input type="email" id="um-email" required placeholder="email@nanobank.co.id"
+          class="field-input" />
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Role <span class="text-red-500">*</span></label>
+        <select id="um-role" required class="field-input">
+          <option value="">-- Pilih Role --</option>
+          <option value="admin">admin</option>
+          <option value="cs-cc">cs-cc</option>
+          <option value="pk">pk</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">PIC Label</label>
+        <input type="text" id="um-pic" placeholder="Label PIC (mis: AlternateChannel)"
+          class="field-input" />
+      </div>
+
+      <div id="um-error" class="hidden flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold">
+        <span class="material-symbols-outlined text-base">error</span>
+        <span id="um-error-msg"></span>
+      </div>
+
+      <div class="flex items-center gap-3 pt-2">
+        <button type="button" onclick="closeUserModal()"
+          class="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold text-sm hover:bg-slate-100 transition-all">
+          Batal
+        </button>
+        <button type="submit" id="um-submit-btn"
+          class="btn-primary-nano flex-1 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+          <span class="material-symbols-outlined text-base text-nano-green">save</span>
+          <span id="um-submit-text">Simpan</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Delete Confirm Modal ───────────────────────────── -->
+<div id="delete-modal" class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+  <div class="m3-card p-6 max-w-sm w-full animate-scaleIn text-center">
+    <div class="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+      <span class="material-symbols-outlined text-3xl text-red-600">delete_forever</span>
+    </div>
+    <h3 class="text-base font-bold text-slate-800 mb-1">Hapus User?</h3>
+    <p class="text-sm text-slate-500 mb-1">Anda akan menghapus:</p>
+    <p id="delete-target-name" class="text-sm font-bold text-nano-blue mb-5"></p>
+    <div class="flex items-center gap-3">
+      <button onclick="closeDeleteModal()"
+        class="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold text-sm hover:bg-slate-100 transition-all">
+        Batal
+      </button>
+      <button onclick="confirmDeleteUser()" id="delete-confirm-btn"
+        class="btn-danger flex-1 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-1.5">
+        <span class="material-symbols-outlined text-base">delete</span>
+        Hapus
+      </button>
+    </div>
+  </div>
+</div>

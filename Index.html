@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Complaint Handling — Nanobank Syariah</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Material Symbols -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            nano: {
+              blue: '#002657',
+              'blue-hover': '#001a3d',
+              'blue-light': '#003375',
+              green: '#30f101',
+              'green-hover': '#28cd00',
+              'green-light': '#80fb61',
+              bg: '#f8fafc',
+              card: '#ffffff'
+            }
+          },
+          fontFamily: { sans: ['Plus Jakarta Sans', 'sans-serif'] }
+        }
+      }
+    };
+  </script>
+
+  <?!= include('Stylesheet'); ?>
+</head>
+
+<body class="h-full bg-slate-50 font-sans text-slate-800">
+
+  <!-- ═══════════════════════════════════════════════════
+       LOGIN SCREEN
+  ════════════════════════════════════════════════════ -->
+  <div id="login-screen" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-nano-blue via-nano-blue-light to-slate-800">
+    <div class="w-full max-w-md">
+      <!-- Logo -->
+      <div class="flex flex-col items-center mb-8">
+        <div class="flex items-center justify-center w-20 h-20 rounded-3xl bg-white/10 backdrop-blur-sm border border-white/20 mb-4">
+          <svg width="48" height="48" viewBox="0 0 85 85" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 15 65 L 15 32 C 15 18, 26 10, 42 10 C 58 10, 68 20, 68 35 L 68 65" stroke="#30f101" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </div>
+        <h1 class="text-2xl font-extrabold text-white tracking-tight">Complaint Handling</h1>
+        <p class="text-white/60 text-sm font-medium mt-1">Nanobank Syariah</p>
+      </div>
+
+      <!-- Card -->
+      <div class="bg-white rounded-3xl shadow-2xl p-8">
+        <h2 class="text-lg font-bold text-nano-blue mb-1">Selamat Datang</h2>
+        <p class="text-sm text-slate-500 mb-6">Masukkan NIK dan Nama untuk masuk</p>
+
+        <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">NIK Karyawan</label>
+            <div class="relative">
+              <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg pointer-events-none">badge</span>
+              <input type="text" id="login-nik" required autocomplete="off" placeholder="Contoh: 522102"
+                class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-nano-blue/20 focus:border-nano-blue bg-slate-50 transition-all" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Nama Lengkap</label>
+            <div class="relative">
+              <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg pointer-events-none">person</span>
+              <input type="text" id="login-nama" required autocomplete="off" placeholder="Contoh: Bashir Hanafi"
+                class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-nano-blue/20 focus:border-nano-blue bg-slate-50 transition-all" />
+            </div>
+          </div>
+
+          <div id="login-error" class="hidden flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold">
+            <span class="material-symbols-outlined text-base">error</span>
+            <span id="login-error-msg"></span>
+          </div>
+
+          <button type="submit" id="login-btn"
+            class="w-full btn-primary-nano py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 mt-2">
+            <span class="material-symbols-outlined text-base text-nano-green" id="login-btn-icon">login</span>
+            <span id="login-btn-text">Masuk</span>
+          </button>
+        </form>
+      </div>
+      <p class="text-center text-white/40 text-xs mt-6">© 2024 Nanobank Syariah. All rights reserved.</p>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       MAIN APP SHELL (hidden until login)
+  ════════════════════════════════════════════════════ -->
+  <div id="app-shell" class="hidden h-screen flex overflow-hidden">
+
+    <!-- SIDEBAR -->
+    <aside id="sidebar" class="sidebar-expanded bg-white h-screen flex flex-col border-r border-slate-200 transition-all duration-300 ease-in-out z-30 shrink-0">
+
+      <!-- Logo + Toggle -->
+      <div class="h-20 flex items-center justify-between px-4 border-b border-slate-100">
+        <div id="logo-full" class="flex items-center gap-3 overflow-hidden">
+          <svg width="38" height="38" viewBox="0 0 85 85" fill="none" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
+            <path d="M 15 65 L 15 32 C 15 18, 26 10, 42 10 C 58 10, 68 20, 68 35 L 68 65" stroke="#30f101" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <div class="nav-text">
+            <p class="text-xs font-extrabold text-nano-blue leading-tight">Complaint</p>
+            <p class="text-xs font-extrabold text-nano-blue leading-tight">Handling</p>
+          </div>
+        </div>
+        <div id="logo-mini" class="hidden mx-auto">
+          <svg width="32" height="32" viewBox="0 0 85 85" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 15 65 L 15 32 C 15 18, 26 10, 42 10 C 58 10, 68 20, 68 35 L 68 65" stroke="#30f101" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </div>
+        <button onclick="toggleSidebar()" class="p-2 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-nano-blue transition-colors">
+          <span class="material-symbols-outlined text-xl" id="toggle-icon">menu_open</span>
+        </button>
+      </div>
+
+      <!-- Nav -->
+      <nav class="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+        <!-- Input Complaint -->
+        <button id="nav-complaint" onclick="switchView('complaint')" title="Input Complaint"
+          class="nav-btn nav-item-active w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl font-bold text-sm transition-all duration-200">
+          <span class="material-symbols-outlined text-2xl shrink-0">edit_note</span>
+          <span class="nav-text whitespace-nowrap overflow-hidden">Input Complaint</span>
+        </button>
+
+        <!-- Reporting -->
+        <button id="nav-reporting" onclick="switchView('reporting')" title="Reporting"
+          class="nav-btn w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl text-slate-700 hover:bg-slate-100 hover:text-nano-blue font-bold text-sm transition-all duration-200">
+          <span class="material-symbols-outlined text-2xl shrink-0 text-slate-400">bar_chart</span>
+          <span class="nav-text whitespace-nowrap overflow-hidden">Reporting</span>
+        </button>
+
+        <!-- User Management (admin only) -->
+        <button id="nav-users" onclick="switchView('users')" title="Manajemen User"
+          class="nav-btn hidden w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl text-slate-700 hover:bg-slate-100 hover:text-nano-blue font-bold text-sm transition-all duration-200">
+          <span class="material-symbols-outlined text-2xl shrink-0 text-slate-400">manage_accounts</span>
+          <span class="nav-text whitespace-nowrap overflow-hidden">Manajemen User</span>
+        </button>
+      </nav>
+
+      <!-- User info + Logout -->
+      <div class="border-t border-slate-100 p-3">
+        <div class="flex items-center gap-3 px-2 py-2">
+          <div id="sidebar-avatar" class="w-9 h-9 rounded-full bg-nano-blue text-white flex items-center justify-center font-bold text-sm shrink-0 border-2 border-nano-green">SA</div>
+          <div class="nav-text overflow-hidden">
+            <p id="sidebar-name" class="text-xs font-bold text-slate-800 truncate">Syariah Admin</p>
+            <p id="sidebar-role" class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate">admin</p>
+          </div>
+          <button onclick="handleLogout()" title="Keluar" class="nav-text ml-auto p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0">
+            <span class="material-symbols-outlined text-lg">logout</span>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <div class="flex-1 flex flex-col h-screen overflow-hidden">
+
+      <!-- Header -->
+      <header class="h-20 bg-white border-b border-slate-200 px-6 flex items-center justify-between z-20 shrink-0">
+        <div>
+          <p class="text-xs font-semibold text-slate-400 mb-0.5" id="breadcrumb">Complaint Handling</p>
+          <h1 id="page-title" class="text-xl font-bold text-nano-blue tracking-tight">Input Complaint</h1>
+        </div>
+        <div class="flex items-center gap-3">
+          <div id="header-avatar" class="w-9 h-9 rounded-full bg-nano-blue text-white flex items-center justify-center font-bold text-sm border-2 border-nano-green">SA</div>
+          <div class="hidden md:block">
+            <p id="header-name" class="text-xs font-bold text-slate-800">Syariah Admin</p>
+            <p id="header-role" class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">admin</p>
+          </div>
+        </div>
+      </header>
+
+      <!-- Views -->
+      <main class="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50">
+
+        <!-- LOADING OVERLAY -->
+        <div id="global-loader" class="hidden fixed inset-0 bg-white/70 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div class="flex flex-col items-center gap-3">
+            <div class="w-12 h-12 rounded-full border-4 border-nano-blue border-t-nano-green animate-spin"></div>
+            <p class="text-sm font-bold text-nano-blue" id="loader-text">Memuat data...</p>
+          </div>
+        </div>
+
+        <!-- ── View: Input Complaint ── -->
+        <section id="view-complaint" class="max-w-5xl mx-auto space-y-6">
+          <?!= include('ViewComplaint'); ?>
+        </section>
+
+        <!-- ── View: Reporting ── -->
+        <section id="view-reporting" class="hidden max-w-7xl mx-auto space-y-6">
+          <?!= include('ViewReporting'); ?>
+        </section>
+
+        <!-- ── View: User Management ── -->
+        <section id="view-users" class="hidden max-w-5xl mx-auto space-y-6">
+          <?!= include('ViewUsers'); ?>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════ TOAST ═══════════════════════ -->
+  <div id="toast-container" class="fixed bottom-6 right-6 z-[100] space-y-3 pointer-events-none"></div>
+
+  <?!= include('JavaScript'); ?>
+</body>
+</html>
