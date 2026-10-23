@@ -162,7 +162,7 @@ function initApp() {
   const navComplaint = document.getElementById('nav-complaint');
   const navUsers     = document.getElementById('nav-users');
 
-  if (role === 'pk') {
+  if (role === 'pk' || role === 'ccs') {
     if (navComplaint) navComplaint.classList.add('hidden');
     if (navUsers) navUsers.classList.add('hidden');
     switchView('reporting');
@@ -187,7 +187,7 @@ function initApp() {
   }
 
   // Load product data for complaint form
-  if (role !== 'pk') loadProductData();
+  if (role !== 'pk' && role !== 'ccs') loadProductData();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -498,16 +498,32 @@ function renderReportHeaders(headers) {
 function updateReportStats(data) {
   document.getElementById('stat-total').textContent    = data.length;
   document.getElementById('stat-open').textContent     = data.filter(r => (r['Complaint Handling Status'] || '').toLowerCase() === 'open').length;
-  document.getElementById('stat-progress').textContent = data.filter(r => (r['Complaint Handling Status'] || '').toLowerCase() === 'in progress').length;
-  document.getElementById('stat-closed').textContent   = data.filter(r => (r['Complaint Handling Status'] || '').toLowerCase() === 'closed').length;
+  document.getElementById('stat-progress').textContent = data.filter(r => {
+    const s = (r['Complaint Handling Status'] || '').toLowerCase().trim();
+    return s === 'extend' || s === 'in progress';
+  }).length;
+  document.getElementById('stat-closed').textContent   = data.filter(r => {
+    const s = (r['Complaint Handling Status'] || '').toLowerCase().trim();
+    return s === 'completed' || s === 'closed';
+  }).length;
 }
 
 function filterReportTable() {
   const search = (document.getElementById('report-search').value || '').toLowerCase().trim();
-  const status = document.getElementById('report-filter-status').value;
+  const status = (document.getElementById('report-filter-status').value || '').toLowerCase().trim();
 
   filteredReportData = allReportData.filter(r => {
-    const matchStatus = !status || (r['Complaint Handling Status'] || '').toLowerCase() === status.toLowerCase();
+    const rawStatus = (r['Complaint Handling Status'] || '').toLowerCase().trim();
+    let matchStatus = true;
+    if (status) {
+      if (status === 'completed' || status === 'closed') {
+        matchStatus = (rawStatus === 'completed' || rawStatus === 'closed');
+      } else if (status === 'extend' || status === 'in progress') {
+        matchStatus = (rawStatus === 'extend' || rawStatus === 'in progress');
+      } else {
+        matchStatus = (rawStatus === status);
+      }
+    }
     if (!matchStatus) return false;
     if (!search) return true;
 
@@ -528,9 +544,11 @@ function renderReportCell(colName, r) {
   }
   if (norm === 'complaint handling status') {
     const status = String(rawVal || 'Open');
-    const chipClass = status.toLowerCase() === 'closed' ? 'chip-closed'
-                    : status.toLowerCase() === 'in progress' ? 'chip-progress'
-                    : status.toLowerCase() === 'open' ? 'chip-open'
+    const s = status.toLowerCase().trim();
+    const chipClass = (s === 'completed' || s === 'closed') ? 'chip-closed'
+                    : (s === 'extend') ? 'chip-extend'
+                    : (s === 'in progress') ? 'chip-progress'
+                    : (s === 'open') ? 'chip-open'
                     : 'chip-overdue';
     return `<td><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${chipClass}">${escapeHtml(status)}</span></td>`;
   }

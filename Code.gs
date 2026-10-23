@@ -420,21 +420,36 @@ function _sendEmailsOnCreate_(formData, ticketId, dueDate) {
     } catch (err) { Logger.log('Email PK gagal: ' + err.message); }
   }
 
-  // 3. Email ke UK dengan tombol prefilled GForm (Completed / Extend)
+  // 3. Email ke UK dengan tombol 'Konfirmasi' (prefilled Task ID & Completed)
   if (formData.emailPic) {
     try {
       const cwUK = template['Copywrite kirim ke UK'];
       const e    = parseEmail(cwUK);
       if (e) {
-        const gformLink = _buildPrefillUrl_(ticketId, '');
-        const bodyWithLink = e.body
-          .replace(/\[Link GForm Anda\]/g, gformLink)
-          .replace(/Link Konfirmasi Status:.*$/m, 'Link Konfirmasi Status: ' + gformLink);
-        const htmlBody = bodyWithLink.replace(/\n/g, '<br>') + '<br><br>' + _buildActionButtons_(ticketId);
+        const confirmUrl     = _buildPrefillUrl_(ticketId, 'Completed');
+        const confirmBtnHtml = _buildConfirmButton_(ticketId);
+
+        // Plain text version
+        const bodyText = e.body
+          .replace(/\[Tombol\s*['"]?Konfirmasi['"]?\]/gi, 'Link Konfirmasi: ' + confirmUrl)
+          .replace(/\[Link GForm Anda\]/g, confirmUrl)
+          .replace(/Link Konfirmasi Status:.*$/m, 'Link Konfirmasi Status: ' + confirmUrl);
+
+        // HTML version
+        let htmlBody = e.body.replace(/\n/g, '<br>');
+        if (/\[Tombol\s*['"]?Konfirmasi['"]?\]/i.test(htmlBody)) {
+          htmlBody = htmlBody.replace(/\[Tombol\s*['"]?Konfirmasi['"]?\]/gi, confirmBtnHtml);
+        } else {
+          htmlBody = htmlBody
+            .replace(/\[Link GForm Anda\]/g, confirmUrl)
+            .replace(/Link Konfirmasi Status:.*$/m, 'Link Konfirmasi Status: ' + confirmUrl);
+          htmlBody += '<br><br>' + confirmBtnHtml;
+        }
+
         MailApp.sendEmail({
           to:       formData.emailPic,
           subject:  e.subject,
-          body:     bodyWithLink,
+          body:     bodyText,
           htmlBody: htmlBody,
           name:     'Customer Care Specialist - Nanobank Syariah'
         });
@@ -472,18 +487,20 @@ function _buildPrefillUrl_(taskId, statusValue) {
   }
 }
 
-// ─── HTML ACTION BUTTONS FOR UK EMAIL ────────────────────
-function _buildActionButtons_(ticketId) {
-  const urlComplete = _buildPrefillUrl_(ticketId, 'Completed');
-  const urlExtend   = _buildPrefillUrl_(ticketId, 'Extend');
-  const btn = (url, label, color) =>
-    `<a href="${url}" target="_blank" style="display:inline-block;padding:12px 28px;margin-right:10px;` +
-    `background:${color};color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;` +
-    `font-size:14px;font-family:Arial,sans-serif;">${label}</a>`;
+// ─── HTML ACTION BUTTON FOR UK EMAIL ─────────────────────
+function _buildConfirmButton_(ticketId) {
+  const urlConfirm = _buildPrefillUrl_(ticketId, 'Completed');
   return '<div style="margin:20px 0;">' +
-    btn(urlComplete, '&#10003; Completed', '#1e7e34') +
-    btn(urlExtend,   '&#128336; Extend',   '#e37400') +
+    `<a href="${urlConfirm}" target="_blank" style="display:inline-block;padding:12px 32px;` +
+    `background:#002657;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold;` +
+    `font-size:14px;font-family:Arial,sans-serif;box-shadow:0 2px 6px rgba(0,0,0,0.2);border:1px solid #001a3d;">` +
+    `&#9998; Konfirmasi` +
+    `</a>` +
     '</div>';
+}
+
+function _buildActionButtons_(ticketId) {
+  return _buildConfirmButton_(ticketId);
 }
 
 // ─── TRIGGER: UK SUBMIT GFORM ─────────────────────────────
