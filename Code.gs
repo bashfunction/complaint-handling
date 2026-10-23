@@ -439,30 +439,61 @@ function _sendEmailsOnCreate_(formData, ticketId, dueDate) {
   const template = cwRows.find(r => String(r['No'] || '').trim() === '1');
   if (!template) return;
 
-  const tz        = 'Asia/Jakarta';
-  const tanggalStr = Utilities.formatDate(new Date(), tz, 'dd MMMM yyyy HH:mm') + ' WIB';
-  const dueDateStr = Utilities.formatDate(dueDate, tz, 'dd MMMM yyyy');
+  const tz          = 'Asia/Jakarta';
+  const now         = new Date();
+  const tanggalOnly = Utilities.formatDate(now, tz, 'dd MMMM yyyy');
+  const pukulOnly   = Utilities.formatDate(now, tz, 'HH:mm');
+  const dueDateStr  = Utilities.formatDate(dueDate, tz, 'dd MMMM yyyy');
+  const categoryVal = formData.complaintCategory || 'Complaint';
 
   function fill(text) {
     if (!text) return '';
     return text
-      .replace(/\{Ticket ID\}/g, ticketId)
-      .replace(/\{SLA\}/g,         formData.sla || '-')
-      .replace(/\{Tanggal\}/g,     tanggalStr)
-      .replace(/\{Product\}/g,     formData.productCategory || '-')
-      .replace(/\{Sub Category\}/g, formData.subCategory || '-')
-      .replace(/\{PIC\}/g,         formData.pic || '-')
-      .replace(/\{Deskripsi\}/g,   formData.description || '-')
-      .replace(/\{Due Date\}/g,    dueDateStr);
+      // 1. Request / Complaint parameter
+      .replace(/\[Request\s*\/\s*Complaint\]/gi, categoryVal)
+      .replace(/\{Request\s*\/\s*Complaint\}/gi, categoryVal)
+      .replace(/Request\s*\/\s*Complaint/gi,     categoryVal)
+      .replace(/\{Complaint\s*Category\}/gi,     categoryVal)
+      .replace(/\{Category\}/gi,                 categoryVal)
+
+      // 2. Ticket ID / Nomor
+      .replace(/\{(Ticket ID|No Ticket|Nomor Tiket|Ticket)\}/gi, ticketId)
+
+      // 3. Tanggal & Waktu
+      .replace(/\{Tanggal\}/gi, tanggalOnly)
+      .replace(/\{Pukul\}/gi,   pukulOnly)
+      .replace(/\{Jam\}/gi,     pukulOnly)
+      .replace(/\{Waktu\}/gi,   pukulOnly)
+
+      // 4. SLA & Due Date
+      .replace(/\{SLA\}/gi,      formData.sla || '-')
+      .replace(/\{Due Date\}/gi, dueDateStr)
+
+      // 5. Product & Sub Category
+      .replace(/\{Product Category\}/gi, formData.productCategory || '-')
+      .replace(/\{Product\}/gi,          formData.productCategory || '-')
+      .replace(/\{Sub Category\}/gi,      formData.subCategory || '-')
+
+      // 6. PIC / Unit Kerja
+      .replace(/\{(PIC Unit Kerja|Unit Kerja|PIC)\}/gi, formData.pic || '-')
+
+      // 7. Data Nasabah
+      .replace(/\{(Account Name|Nama Nasabah|Nama|Name)\}/gi, formData.name || '-')
+      .replace(/\{Account Number\}/gi, formData.accountNumber || '-')
+      .replace(/\{Phone Number\}/gi,   formData.phoneNumber || '-')
+
+      // 8. Deskripsi
+      .replace(/\{(Description|Deskripsi)\}/gi, formData.description || '-');
   }
 
   function parseEmail(raw) {
     if (!raw) return null;
-    const subjectLine = raw.split('\n').find(l => l.startsWith('Subject:'));
-    const subject = subjectLine ? subjectLine.replace('Subject:', '').trim() : 'Notifikasi Complaint';
-    const bodyStart = raw.indexOf('Isi:');
-    const body = bodyStart !== -1 ? raw.slice(bodyStart + 4).trim() : raw;
-    return { subject: fill(subject), body: fill(body) };
+    const filledRaw   = fill(raw);
+    const subjectLine = filledRaw.split('\n').find(l => l.startsWith('Subject:'));
+    const subject     = subjectLine ? subjectLine.replace('Subject:', '').trim() : 'Notifikasi Complaint';
+    const bodyStart   = filledRaw.indexOf('Isi:');
+    const body        = bodyStart !== -1 ? filledRaw.slice(bodyStart + 4).trim() : filledRaw;
+    return { subject, body };
   }
 
   // 1. Email ke Nasabah
@@ -634,27 +665,52 @@ function onGFormSubmit(e) {
 // ─── NOTIFIKASI CCS ──────────────────────────────────────
 function _sendToCCS_(taskId, status, submitter, alasan, slaExt, row, headers, timestamp) {
   try {
-    const cwRows   = sheetToObjects(getSheet(SHEET_COPYWRITING));
-    const template = cwRows.find(r => String(r['No'] || '').trim() === '2');
+    const cwRows = sheetToObjects(getSheet(SHEET_COPYWRITING));
+    let template;
+
+    if (String(status).toLowerCase() === 'completed') {
+      // Saat Tiket Completed/ Selesai (Row 4 di sheet copy-writing)
+      template = cwRows.find(r => String(r['No'] || '').trim() === '4' || 
+                                   String(r['Jenis Notifikasi'] || '').toLowerCase().includes('completed') ||
+                                   String(r['Jenis Notifikasi'] || '').toLowerCase().includes('selesai'));
+    } else {
+      // Saat Perpanjangan SLA (H10) (Row 2 di sheet copy-writing)
+      template = cwRows.find(r => String(r['No'] || '').trim() === '2' || 
+                                   String(r['Jenis Notifikasi'] || '').toLowerCase().includes('perpanjangan'));
+    }
     if (!template) return;
 
-    const tz     = 'Asia/Jakarta';
-    const colPIC = headers.indexOf('currentpic');
-    const tsStr  = Utilities.formatDate(timestamp, tz, 'dd MMMM yyyy HH:mm') + ' WIB';
-    const raw    = String(template['Copywrite kirim ke CCS'] || '');
-    const filled = raw
-      .replace(/\{Ticket ID\}/g,     taskId)
-      .replace(/\{PIC\}/g,           colPIC >= 0 ? String(row[colPIC] || '-') : '-')
-      .replace(/\{Timestamp\}/g,     tsStr)
-      .replace(/\{Email Pengisi\}/g, submitter || '-')
-      .replace(/\{Status\}/g,        status)
-      .replace(/\{Alasan Extend\}/g, alasan || '-')
-      .replace(/\{SLA Extend\}/g,    slaExt || '-');
+    const tz         = 'Asia/Jakarta';
+    const colPIC     = headers.indexOf('currentpic');
+    const colAccName = headers.indexOf('account name');
+    const tsStr      = Utilities.formatDate(timestamp, tz, 'dd MMMM yyyy HH:mm') + ' WIB';
+    const accName    = colAccName >= 0 ? String(row[colAccName] || '-') : '-';
+    const picName    = colPIC >= 0 ? String(row[colPIC] || '-') : '-';
 
-    const subjectLine = filled.split('\n').find(l => l.startsWith('Subject:'));
-    const subject     = subjectLine ? subjectLine.replace('Subject:', '').trim() : '[CCS] Update Tiket ' + taskId;
-    const bodyStart   = filled.indexOf('Isi:');
-    const body        = bodyStart !== -1 ? filled.slice(bodyStart + 4).trim() : filled;
+    const raw = String(template['Copywrite kirim ke CCS'] || '');
+    if (!raw) return;
+
+    function fillCCS(text) {
+      if (!text) return '';
+      return text
+        .replace(/\{(Ticket ID|No Ticket|Nomor Tiket|Ticket)\}/gi, taskId)
+        .replace(/\{(Nama|Name|Account Name)\}/gi,                 accName)
+        .replace(/\{(PIC|Unit Kerja|PIC Unit Kerja)\}/gi,          picName)
+        .replace(/\{Timestamp\}/gi,                                tsStr)
+        .replace(/\{Email Pengisi\}/gi,                            submitter || '-')
+        .replace(/\{Status\}/gi,                                   status)
+        .replace(/\{Alasan Extend\}/gi,                            alasan || '-')
+        .replace(/\{SLA Extend\}/gi,                               slaExt || '-');
+    }
+
+    const filledRaw   = fillCCS(raw);
+    const subjectLine = filledRaw.split('\n').find(l => l.startsWith('Subject:'));
+    const defaultSubj = (String(status).toLowerCase() === 'completed')
+      ? 'Informasi Penyelesaian Pengaduan oleh Unit Kerja [' + taskId + ']'
+      : '[CCS] Update Tiket ' + taskId;
+    const subject     = subjectLine ? subjectLine.replace('Subject:', '').trim() : defaultSubj;
+    const bodyStart   = filledRaw.indexOf('Isi:');
+    const body        = bodyStart !== -1 ? filledRaw.slice(bodyStart + 4).trim() : filledRaw;
 
     const users     = sheetToObjects(getSheet(SHEET_USERS));
     const ccsEmails = users
