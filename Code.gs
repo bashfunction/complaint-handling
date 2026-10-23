@@ -412,13 +412,17 @@ function _sendEmailsOnCreate_(formData, ticketId, dueDate) {
     } catch (err) { Logger.log('Email nasabah gagal: ' + err.message); }
   }
 
-  // 2. Email ke PK
-  if (formData.emailPic) {
-    try {
+  // 2. Email ke PK (diambil dari sheet 'users' dengan role 'pk')
+  try {
+    const users    = sheetToObjects(getSheet(SHEET_USERS));
+    const pkEmails = users
+      .filter(u => String(u.role || '').trim().toLowerCase() === 'pk' && u.email)
+      .map(u => u.email);
+    if (pkEmails.length > 0) {
       const e = parseEmail(template['Copywrite Kirim ke PK']);
-      if (e) MailApp.sendEmail({ to: formData.emailPic, subject: e.subject, body: e.body, name: 'Nanobank Syariah' });
-    } catch (err) { Logger.log('Email PK gagal: ' + err.message); }
-  }
+      if (e) MailApp.sendEmail({ to: pkEmails.join(','), subject: e.subject, body: e.body, name: 'Nanobank Syariah' });
+    }
+  } catch (err) { Logger.log('Email PK gagal: ' + err.message); }
 
   // 3. Email ke UK dengan tombol 'Konfirmasi' (prefilled Task ID & Completed)
   if (formData.emailPic) {
@@ -677,9 +681,11 @@ function _sendExtendNotifToPK_(taskId, row, headers) {
     const template = cwRows.find(r => String(r['No'] || '').trim() === '2');
     if (!template) return;
 
-    const colEmailPic = headers.indexOf('emailpic');
-    const emailPK     = colEmailPic >= 0 ? String(row[colEmailPic] || '') : '';
-    if (!emailPK) return;
+    const users    = sheetToObjects(getSheet(SHEET_USERS));
+    const pkEmails = users
+      .filter(u => String(u.role || '').trim().toLowerCase() === 'pk' && u.email)
+      .map(u => u.email);
+    if (pkEmails.length === 0) return;
 
     const raw    = String(template['Copywrite Kirim ke PK'] || '');
     const filled = raw.replace(/\{Ticket ID\}/g, taskId);
@@ -687,7 +693,7 @@ function _sendExtendNotifToPK_(taskId, row, headers) {
     const subject     = subjectLine ? subjectLine.replace('Subject:', '').trim() : 'Perpanjangan SLA - Tiket ' + taskId;
     const bodyStart   = filled.indexOf('Isi:');
     const body        = bodyStart !== -1 ? filled.slice(bodyStart + 4).trim() : filled;
-    MailApp.sendEmail({ to: emailPK, subject, body, name: 'Nanobank Syariah' });
+    MailApp.sendEmail({ to: pkEmails.join(','), subject, body, name: 'Nanobank Syariah' });
   } catch (err) { Logger.log('sendExtendNotifToPK error: ' + err.message); }
 }
 
