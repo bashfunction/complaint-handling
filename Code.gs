@@ -3,13 +3,14 @@
 // Complaint Handling App | Nanobank Syariah
 // ============================================================
 
-const SPREADSHEET_ID = '1iJfE0AdB0kbHAnQv2OCJRip7jNxpsgB1q8obn8dQzL4';
-const SHEET_USERS      = 'users';
-const SHEET_COMPLAINTS = 'complaints';
-const SHEET_REPORT     = 'report';
-const SHEET_MAPPING    = 'mapping';
-const SHEET_PRODUCT    = 'product';
+const SPREADSHEET_ID    = '1iJfE0AdB0kbHAnQv2OCJRip7jNxpsgB1q8obn8dQzL4';
+const SHEET_USERS       = 'users';
+const SHEET_COMPLAINTS  = 'complaints';
+const SHEET_REPORT      = 'report';
+const SHEET_MAPPING     = 'mapping';
+const SHEET_PRODUCT     = 'product';
 const SHEET_COPYWRITING = 'copy-writing';
+const GFORM_ID          = '1qrczQsuAq-VA-nF9L9-bIwrQ_zrMfirchT-4Q0gO5oo';
 
 // ─── Web App Entry Point ──────────────────────────────────
 function doGet(e) {
@@ -323,36 +324,35 @@ function submitComplaint(formData) {
     ];
     sheet.appendRow(complaintRow);
 
-    // Build report row (matching sheet 'report' headers dynamically)
-    const dueDate = new Date(timestamp);
-    dueDate.setDate(dueDate.getDate() + Number(formData.sla || 0));
+    // Build report row — Due Date dihitung dalam hari kerja (exclude Sabtu & Minggu)
+    const dueDate = addWorkingDays_(timestamp, Number(formData.sla || 0));
 
     const reportHeaders = reportSh.getRange(1, 1, 1, Math.max(reportSh.getLastColumn(), 24)).getValues()[0];
     const reportValueMap = {
-      'case id': ticketId,
-      'create date/time': timestamp,
-      'sla': formData.sla,
-      'monitor by': '',
-      'account name': formData.name,
-      'code id sub-category': formData.codeId,
-      'sub category': formData.subCategory,
-      'created by': formData.createdBy,
-      'product category': formData.productCategory,
-      'category': formData.complaintCategory,
-      'complaint handling status': 'Open',
-      'currentpic': formData.pic,
-      'emailpic': formData.emailPic,
-      'cif': '',
-      'account number': formData.accountNumber,
-      'classification': formData.classification,
-      'reason': formData.reason,
-      'date completed': '',
-      'due date': dueDate,
-      'nominal': formData.transactionAmount1,
-      'tanggal transaksi': formData.dateTransaction,
-      'description report': formData.description,
+      'case id':                    ticketId,
+      'create date/time':           timestamp,
+      'sla':                        formData.sla,
+      'monitor by':                 '',
+      'account name':               formData.name,
+      'code id sub-category':       formData.codeId,
+      'sub category':               formData.subCategory,
+      'created by':                 formData.createdBy,
+      'product category':           formData.productCategory,
+      'category':                   formData.complaintCategory,
+      'complaint handling status':  'Open',
+      'currentpic':                 formData.pic,
+      'emailpic':                   formData.emailPic,
+      'cif':                        '',
+      'account number':             formData.accountNumber,
+      'classification':             formData.classification,
+      'reason':                     formData.reason,
+      'date completed':             '',
+      'due date':                   dueDate,
+      'nominal':                    formData.transactionAmount1,
+      'tanggal transaksi':          formData.dateTransaction,
+      'description report':         formData.description,
       'location and merchant name': '',
-      'completeday': ''
+      'completeday':                ''
     };
 
     const reportRow = reportHeaders.map(h => {
@@ -361,8 +361,8 @@ function submitComplaint(formData) {
     });
     reportSh.appendRow(reportRow);
 
-    // Send emails
-    _sendEmails(formData, ticketId);
+    // Send emails on create
+    _sendEmailsOnCreate_(formData, ticketId, dueDate);
 
     return { success: true, ticketId };
   } catch (err) {
@@ -372,42 +372,414 @@ function submitComplaint(formData) {
   }
 }
 
-function _sendEmails(formData, ticketId) {
-  const cwRows = sheetToObjects(getSheet(SHEET_COPYWRITING));
-  const template = cwRows.find(r => String(r['No']) === '1');
+// ─── EMAIL: SAAT TIKET DIBUAT ─────────────────────────────
+function _sendEmailsOnCreate_(formData, ticketId, dueDate) {
+  const cwRows   = sheetToObjects(getSheet(SHEET_COPYWRITING));
+  const template = cwRows.find(r => String(r['No'] || '').trim() === '1');
   if (!template) return;
 
-  function fillTemplate(text) {
+  const tz        = 'Asia/Jakarta';
+  const tanggalStr = Utilities.formatDate(new Date(), tz, 'dd MMMM yyyy HH:mm') + ' WIB';
+  const dueDateStr = Utilities.formatDate(dueDate, tz, 'dd MMMM yyyy');
+
+  function fill(text) {
+    if (!text) return '';
     return text
       .replace(/\{Ticket ID\}/g, ticketId)
-      .replace(/\{SLA\}/g, formData.sla || '-');
+      .replace(/\{SLA\}/g,         formData.sla || '-')
+      .replace(/\{Tanggal\}/g,     tanggalStr)
+      .replace(/\{Product\}/g,     formData.productCategory || '-')
+      .replace(/\{Sub Category\}/g, formData.subCategory || '-')
+      .replace(/\{PIC\}/g,         formData.pic || '-')
+      .replace(/\{Deskripsi\}/g,   formData.description || '-')
+      .replace(/\{Due Date\}/g,    dueDateStr);
   }
 
-  // Parse subject + body from copywriting cell
-  function parseEmailContent(raw) {
-    const lines  = raw.split('\n');
-    const subjectLine = lines.find(l => l.startsWith('Subject:'));
+  function parseEmail(raw) {
+    if (!raw) return null;
+    const subjectLine = raw.split('\n').find(l => l.startsWith('Subject:'));
     const subject = subjectLine ? subjectLine.replace('Subject:', '').trim() : 'Notifikasi Complaint';
     const bodyStart = raw.indexOf('Isi:');
     const body = bodyStart !== -1 ? raw.slice(bodyStart + 4).trim() : raw;
-    return { subject: fillTemplate(subject), body: fillTemplate(body) };
+    return { subject: fill(subject), body: fill(body) };
   }
 
-  // Email to customer
+  // 1. Email ke Nasabah
   if (formData.emailAddress) {
     try {
-      const { subject, body } = parseEmailContent(template['Copywrite Kirim ke Nasabah']);
-      MailApp.sendEmail({ to: formData.emailAddress, subject, body });
-    } catch (e) { Logger.log('Email nasabah gagal: ' + e.message); }
+      const e = parseEmail(template['Copywrite Kirim ke Nasabah']);
+      if (e) MailApp.sendEmail({ to: formData.emailAddress, subject: e.subject, body: e.body, name: 'Nanobank Syariah' });
+    } catch (err) { Logger.log('Email nasabah gagal: ' + err.message); }
   }
 
-  // Email to PK
+  // 2. Email ke PK
   if (formData.emailPic) {
     try {
-      const { subject, body } = parseEmailContent(template['Copywrite Kirim ke PK']);
-      MailApp.sendEmail({ to: formData.emailPic, subject, body });
-    } catch (e) { Logger.log('Email PK gagal: ' + e.message); }
+      const e = parseEmail(template['Copywrite Kirim ke PK']);
+      if (e) MailApp.sendEmail({ to: formData.emailPic, subject: e.subject, body: e.body, name: 'Nanobank Syariah' });
+    } catch (err) { Logger.log('Email PK gagal: ' + err.message); }
   }
+
+  // 3. Email ke UK dengan tombol prefilled GForm (Completed / Extend)
+  if (formData.emailPic) {
+    try {
+      const cwUK = template['Copywrite kirim ke UK'];
+      const e    = parseEmail(cwUK);
+      if (e) {
+        const gformLink = _buildPrefillUrl_(ticketId, '');
+        const bodyWithLink = e.body
+          .replace(/\[Link GForm Anda\]/g, gformLink)
+          .replace(/Link Konfirmasi Status:.*$/m, 'Link Konfirmasi Status: ' + gformLink);
+        const htmlBody = bodyWithLink.replace(/\n/g, '<br>') + '<br><br>' + _buildActionButtons_(ticketId);
+        MailApp.sendEmail({
+          to:       formData.emailPic,
+          subject:  e.subject,
+          body:     bodyWithLink,
+          htmlBody: htmlBody,
+          name:     'Customer Care Specialist - Nanobank Syariah'
+        });
+      }
+    } catch (err) { Logger.log('Email UK gagal: ' + err.message); }
+  }
+}
+
+// ─── GFORM PREFILL LINK BUILDER ───────────────────────────
+function _buildPrefillUrl_(taskId, statusValue) {
+  try {
+    const form  = FormApp.openById(GFORM_ID);
+    const items = form.getItems();
+    const findItem = title => items.find(x => x.getTitle().trim() === title || x.getTitle().trim() === title.trim());
+
+    const taskIdItem = findItem('Task ID');
+    const statusItem = findItem('Status');
+    const resp = form.createResponse();
+
+    if (taskIdItem) {
+      resp.withItemResponse(taskIdItem.asTextItem().createResponse(taskId));
+    }
+    if (statusValue && statusItem) {
+      try {
+        const sResp = statusItem.getType() === FormApp.ItemType.LIST
+          ? statusItem.asListItem().createResponse(statusValue)
+          : statusItem.asMultipleChoiceItem().createResponse(statusValue);
+        resp.withItemResponse(sResp);
+      } catch (e) { Logger.log('Status prefill error: ' + e.message); }
+    }
+    return resp.toPrefilledUrl();
+  } catch (err) {
+    Logger.log('buildPrefillUrl error: ' + err.message);
+    return 'https://docs.google.com/forms/d/' + GFORM_ID + '/viewform';
+  }
+}
+
+// ─── HTML ACTION BUTTONS FOR UK EMAIL ────────────────────
+function _buildActionButtons_(ticketId) {
+  const urlComplete = _buildPrefillUrl_(ticketId, 'Completed');
+  const urlExtend   = _buildPrefillUrl_(ticketId, 'Extend');
+  const btn = (url, label, color) =>
+    `<a href="${url}" target="_blank" style="display:inline-block;padding:12px 28px;margin-right:10px;` +
+    `background:${color};color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;` +
+    `font-size:14px;font-family:Arial,sans-serif;">${label}</a>`;
+  return '<div style="margin:20px 0;">' +
+    btn(urlComplete, '&#10003; Completed', '#1e7e34') +
+    btn(urlExtend,   '&#128336; Extend',   '#e37400') +
+    '</div>';
+}
+
+// ─── TRIGGER: UK SUBMIT GFORM ─────────────────────────────
+// Pasang trigger: Triggers > Add Trigger > onGFormSubmit
+// From: Spreadsheet, Event: On form submit
+function onGFormSubmit(e) {
+  try {
+    const nv        = e.namedValues;
+    const taskId    = String((nv['Task ID'] || nv['Task ID\n'] || [''])[0]).trim();
+    const status    = String((nv['Status']  || [''])[0]).trim();
+    const alasan    = String((nv['Alasan Extend'] || [''])[0]).trim();
+    const slaExt    = String((nv['SLA']     || [''])[0]).trim();
+    const submitter = String((nv['Email Address'] || [''])[0]).trim();
+    const timestamp = new Date();
+
+    if (!taskId || !status) return;
+
+    const reportSh = getSheet(SHEET_REPORT);
+    if (!reportSh) return;
+
+    const data    = reportSh.getDataRange().getValues();
+    const headers = data[0].map(h => String(h || '').trim().toLowerCase());
+
+    const colCaseId   = headers.indexOf('case id');
+    const colStatus   = headers.indexOf('complaint handling status');
+    const colDateComp = headers.indexOf('date completed');
+    const colDueDate  = headers.indexOf('due date');
+    const colComplete = headers.indexOf('completeday');
+    const colCreateDt = headers.indexOf('create date/time');
+    const colPIC      = headers.indexOf('currentpic');
+    const colEmailPic = headers.indexOf('emailpic');
+    const colProdCat  = headers.indexOf('product category');
+    const colSubCat   = headers.indexOf('sub category');
+    const colSLA      = headers.indexOf('sla');
+
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][colCaseId] || '').trim() !== taskId) continue;
+      const row = data[i];
+
+      if (status === 'Completed') {
+        const createDt    = row[colCreateDt] instanceof Date ? row[colCreateDt] : new Date(row[colCreateDt]);
+        const completeDay = _countWorkingDays_(createDt, timestamp);
+        if (colStatus   >= 0) reportSh.getRange(i + 1, colStatus   + 1).setValue('Completed');
+        if (colDateComp >= 0) reportSh.getRange(i + 1, colDateComp + 1).setValue(timestamp);
+        if (colComplete >= 0) reportSh.getRange(i + 1, colComplete + 1).setValue(completeDay);
+        _sendToCCS_(taskId, status, submitter, alasan, slaExt, row, headers, timestamp);
+
+      } else if (status === 'Extend') {
+        const currentDue  = row[colDueDate] instanceof Date ? row[colDueDate] : new Date(row[colDueDate] || new Date());
+        const slaExtNum   = parseInt(slaExt || '10', 10) || 10;
+        const newDueDate  = addWorkingDays_(currentDue, slaExtNum);
+        if (colStatus  >= 0) reportSh.getRange(i + 1, colStatus  + 1).setValue('Extend');
+        if (colDueDate >= 0) reportSh.getRange(i + 1, colDueDate + 1).setValue(newDueDate);
+        _sendToCCS_(taskId, status, submitter, alasan, slaExt, row, headers, timestamp);
+        _sendExtendNotifToNasabah_(taskId, newDueDate);
+        _sendExtendNotifToUK_(taskId, alasan, slaExtNum, row, headers);
+        _sendExtendNotifToPK_(taskId, row, headers);
+      }
+      break;
+    }
+  } catch (err) {
+    Logger.log('onGFormSubmit error: ' + err.message);
+  }
+}
+
+// ─── NOTIFIKASI CCS ──────────────────────────────────────
+function _sendToCCS_(taskId, status, submitter, alasan, slaExt, row, headers, timestamp) {
+  try {
+    const cwRows   = sheetToObjects(getSheet(SHEET_COPYWRITING));
+    const template = cwRows.find(r => String(r['No'] || '').trim() === '2');
+    if (!template) return;
+
+    const tz     = 'Asia/Jakarta';
+    const colPIC = headers.indexOf('currentpic');
+    const tsStr  = Utilities.formatDate(timestamp, tz, 'dd MMMM yyyy HH:mm') + ' WIB';
+    const raw    = String(template['Copywrite kirim ke CCS'] || '');
+    const filled = raw
+      .replace(/\{Ticket ID\}/g,     taskId)
+      .replace(/\{PIC\}/g,           colPIC >= 0 ? String(row[colPIC] || '-') : '-')
+      .replace(/\{Timestamp\}/g,     tsStr)
+      .replace(/\{Email Pengisi\}/g, submitter || '-')
+      .replace(/\{Status\}/g,        status)
+      .replace(/\{Alasan Extend\}/g, alasan || '-')
+      .replace(/\{SLA Extend\}/g,    slaExt || '-');
+
+    const subjectLine = filled.split('\n').find(l => l.startsWith('Subject:'));
+    const subject     = subjectLine ? subjectLine.replace('Subject:', '').trim() : '[CCS] Update Tiket ' + taskId;
+    const bodyStart   = filled.indexOf('Isi:');
+    const body        = bodyStart !== -1 ? filled.slice(bodyStart + 4).trim() : filled;
+
+    const users     = sheetToObjects(getSheet(SHEET_USERS));
+    const ccsEmails = users
+      .filter(u => String(u.role || '').trim().toLowerCase() === 'ccs' && u.email)
+      .map(u => u.email);
+    if (ccsEmails.length > 0) {
+      MailApp.sendEmail({ to: ccsEmails.join(','), subject, body, name: 'Sistem Complaint Handling' });
+    }
+  } catch (err) { Logger.log('sendToCCS error: ' + err.message); }
+}
+
+// ─── NOTIFIKASI EXTEND KE NASABAH ────────────────────────
+function _sendExtendNotifToNasabah_(taskId, newDueDate) {
+  try {
+    const cwRows   = sheetToObjects(getSheet(SHEET_COPYWRITING));
+    const template = cwRows.find(r => String(r['No'] || '').trim() === '2');
+    if (!template) return;
+
+    const compSh      = getSheet(SHEET_COMPLAINTS);
+    const compData    = compSh.getDataRange().getValues();
+    const compHeaders = compData[0].map(h => String(h || '').trim().toLowerCase());
+    const ticketIdx   = compHeaders.findIndex(h => h === 'ticket id');
+    const emailIdx    = compHeaders.findIndex(h => h === 'email address');
+    let nasabahEmail  = '';
+
+    for (let i = 1; i < compData.length; i++) {
+      if (String(compData[i][ticketIdx] || '').trim() === taskId) {
+        nasabahEmail = String(compData[i][emailIdx] || '');
+        break;
+      }
+    }
+    if (!nasabahEmail) return;
+
+    const tz         = 'Asia/Jakarta';
+    const dueDateStr = Utilities.formatDate(newDueDate, tz, 'dd MMMM yyyy');
+    const raw        = String(template['Copywrite Kirim ke Nasabah'] || '');
+    const filled     = raw.replace(/\{Ticket ID\}/g, taskId).replace(/\{Due Date\}/g, dueDateStr);
+
+    const subjectLine = filled.split('\n').find(l => l.startsWith('Subject:'));
+    const subject     = subjectLine ? subjectLine.replace('Subject:', '').trim() : 'Perpanjangan Tiket ' + taskId;
+    const bodyStart   = filled.indexOf('Isi:');
+    const body        = bodyStart !== -1 ? filled.slice(bodyStart + 4).trim() : filled;
+    MailApp.sendEmail({ to: nasabahEmail, subject, body, name: 'Nanobank Syariah' });
+  } catch (err) { Logger.log('sendExtendNotifToNasabah error: ' + err.message); }
+}
+
+// ─── NOTIFIKASI EXTEND KE UK ─────────────────────────────
+function _sendExtendNotifToUK_(taskId, alasan, slaExtNum, row, headers) {
+  try {
+    const cwRows   = sheetToObjects(getSheet(SHEET_COPYWRITING));
+    const template = cwRows.find(r => String(r['No'] || '').trim() === '2');
+    if (!template) return;
+
+    const colEmailPic = headers.indexOf('emailpic');
+    const colPIC      = headers.indexOf('currentpic');
+    const colProdCat  = headers.indexOf('product category');
+    const colSubCat   = headers.indexOf('sub category');
+    const emailUK     = colEmailPic >= 0 ? String(row[colEmailPic] || '') : '';
+    if (!emailUK) return;
+
+    const gformLink = _buildPrefillUrl_(taskId, '');
+    const raw = String(template['Copywrite kirim ke UK'] || '');
+    const filled = raw
+      .replace(/\{Ticket ID\}/g,     taskId)
+      .replace(/\{PIC\}/g,           colPIC     >= 0 ? String(row[colPIC]     || '-') : '-')
+      .replace(/\{Product\}/g,       colProdCat >= 0 ? String(row[colProdCat] || '-') : '-')
+      .replace(/\{Sub Category\}/g,  colSubCat  >= 0 ? String(row[colSubCat]  || '-') : '-')
+      .replace(/\{Alasan Extend\}/g, alasan || '-')
+      .replace(/\[Link GForm Anda\]/g, gformLink)
+      .replace(/Link Konfirmasi Status:.*$/m, 'Link Konfirmasi Status: ' + gformLink);
+
+    const subjectLine = filled.split('\n').find(l => l.startsWith('Subject:'));
+    const subject     = subjectLine ? subjectLine.replace('Subject:', '').trim() : 'Extend SLA - Tiket ' + taskId;
+    const bodyStart   = filled.indexOf('Isi:');
+    const body        = bodyStart !== -1 ? filled.slice(bodyStart + 4).trim() : filled;
+    const htmlBody    = body.replace(/\n/g, '<br>') + '<br><br>' + _buildActionButtons_(taskId);
+    MailApp.sendEmail({ to: emailUK, subject, body, htmlBody, name: 'Customer Care Specialist - Nanobank Syariah' });
+  } catch (err) { Logger.log('sendExtendNotifToUK error: ' + err.message); }
+}
+
+// ─── NOTIFIKASI EXTEND KE PK ─────────────────────────────
+function _sendExtendNotifToPK_(taskId, row, headers) {
+  try {
+    const cwRows   = sheetToObjects(getSheet(SHEET_COPYWRITING));
+    const template = cwRows.find(r => String(r['No'] || '').trim() === '2');
+    if (!template) return;
+
+    const colEmailPic = headers.indexOf('emailpic');
+    const emailPK     = colEmailPic >= 0 ? String(row[colEmailPic] || '') : '';
+    if (!emailPK) return;
+
+    const raw    = String(template['Copywrite Kirim ke PK'] || '');
+    const filled = raw.replace(/\{Ticket ID\}/g, taskId);
+    const subjectLine = filled.split('\n').find(l => l.startsWith('Subject:'));
+    const subject     = subjectLine ? subjectLine.replace('Subject:', '').trim() : 'Perpanjangan SLA - Tiket ' + taskId;
+    const bodyStart   = filled.indexOf('Isi:');
+    const body        = bodyStart !== -1 ? filled.slice(bodyStart + 4).trim() : filled;
+    MailApp.sendEmail({ to: emailPK, subject, body, name: 'Nanobank Syariah' });
+  } catch (err) { Logger.log('sendExtendNotifToPK error: ' + err.message); }
+}
+
+// ─── TRIGGER HARIAN: REMINDER H-0 SLA ────────────────────
+// Kirim email ke UK jika tiket Open/Extend dan Due Date = hari ini
+// Daftarkan via addTriggers() sekali dari GAS Editor
+function sendSLAReminderEmails() {
+  try {
+    const reportSh = getSheet(SHEET_REPORT);
+    if (!reportSh) return;
+    const data    = reportSh.getDataRange().getValues();
+    const headers = data[0].map(h => String(h || '').trim().toLowerCase());
+
+    const colStatus   = headers.indexOf('complaint handling status');
+    const colDueDate  = headers.indexOf('due date');
+    const colCaseId   = headers.indexOf('case id');
+    const colEmailPic = headers.indexOf('emailpic');
+    const colPIC      = headers.indexOf('currentpic');
+    const colProdCat  = headers.indexOf('product category');
+    const colSubCat   = headers.indexOf('sub category');
+    const colSLA      = headers.indexOf('sla');
+    const colCreateDt = headers.indexOf('create date/time');
+
+    const cwRows   = sheetToObjects(getSheet(SHEET_COPYWRITING));
+    const template = cwRows.find(r => String(r['No'] || '').trim() === '3');
+    if (!template) return;
+
+    const tz       = 'Asia/Jakarta';
+    const todayStr = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+
+    for (let i = 1; i < data.length; i++) {
+      const row    = data[i];
+      const status = String(row[colStatus] || '').trim();
+      if (status !== 'Open' && status !== 'Extend') continue;
+
+      const dueDate    = row[colDueDate] instanceof Date ? row[colDueDate] : new Date(row[colDueDate]);
+      const dueDateStr = Utilities.formatDate(dueDate, tz, 'yyyy-MM-dd');
+      if (dueDateStr !== todayStr) continue;
+
+      const taskId  = String(row[colCaseId]   || '');
+      const emailUK = String(row[colEmailPic] || '');
+      if (!taskId || !emailUK) continue;
+
+      const createDt   = row[colCreateDt] instanceof Date ? row[colCreateDt] : new Date(row[colCreateDt]);
+      const gformLink  = _buildPrefillUrl_(taskId, '');
+      const raw        = String(template['Copywrite kirim ke UK'] || '');
+      const filled     = raw
+        .replace(/\{Ticket ID\}/g,    taskId)
+        .replace(/\{Tanggal\}/g,      Utilities.formatDate(createDt, tz, 'dd MMMM yyyy'))
+        .replace(/\{PIC\}/g,          colPIC     >= 0 ? String(row[colPIC]     || '-') : '-')
+        .replace(/\{Product\}/g,      colProdCat >= 0 ? String(row[colProdCat] || '-') : '-')
+        .replace(/\{Sub Category\}/g, colSubCat  >= 0 ? String(row[colSubCat]  || '-') : '-')
+        .replace(/\{SLA\}/g,          colSLA     >= 0 ? String(row[colSLA]     || '-') : '-')
+        .replace(/\{Due Date\}/g,     Utilities.formatDate(dueDate, tz, 'dd MMMM yyyy'))
+        .replace(/\[Link GForm Anda\]/g, gformLink)
+        .replace(/Link Konfirmasi Status:.*$/m, 'Link Konfirmasi Status: ' + gformLink);
+
+      const subjectLine = filled.split('\n').find(l => l.startsWith('Subject:'));
+      const subject     = subjectLine ? subjectLine.replace('Subject:', '').trim() : '[REMINDER H-0] Tiket ' + taskId;
+      const bodyStart   = filled.indexOf('Isi:');
+      const body        = bodyStart !== -1 ? filled.slice(bodyStart + 4).trim() : filled;
+      const htmlBody    = body.replace(/\n/g, '<br>') + '<br><br>' + _buildActionButtons_(taskId);
+      try {
+        MailApp.sendEmail({ to: emailUK, subject, body, htmlBody, name: 'Customer Care Specialist - Nanobank Syariah' });
+      } catch (err) {
+        Logger.log('Reminder gagal untuk ' + taskId + ': ' + err.message);
+      }
+    }
+  } catch (err) {
+    Logger.log('sendSLAReminderEmails error: ' + err.message);
+  }
+}
+
+// ─── SETUP TRIGGER (Jalankan SEKALI dari GAS Editor) ─────
+function addTriggers() {
+  ScriptApp.getProjectTriggers().forEach(t => {
+    if (t.getHandlerFunction() === 'sendSLAReminderEmails') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('sendSLAReminderEmails')
+    .timeBased().everyDays(1).atHour(7).create();
+  Logger.log('Trigger sendSLAReminderEmails berhasil didaftarkan: setiap hari pukul 07.00');
+}
+
+// ─── HELPER: HITUNG HARI KERJA ────────────────────────────
+// Tambahkan N hari kerja (exclude Sabtu=6 & Minggu=0)
+function addWorkingDays_(startDate, days) {
+  const result = new Date(startDate);
+  let added = 0;
+  while (added < days) {
+    result.setDate(result.getDate() + 1);
+    const dow = result.getDay();
+    if (dow !== 0 && dow !== 6) added++;
+  }
+  return result;
+}
+
+// Hitung hari kerja antara dua tanggal
+function _countWorkingDays_(startDate, endDate) {
+  let count = 0;
+  const cur = new Date(startDate);
+  cur.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setHours(0, 0, 0, 0);
+  while (cur < end) {
+    cur.setDate(cur.getDate() + 1);
+    const dow = cur.getDay();
+    if (dow !== 0 && dow !== 6) count++;
+  }
+  return count;
 }
 
 // ─── REPORTING ────────────────────────────────────────────
