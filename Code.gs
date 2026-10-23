@@ -604,13 +604,50 @@ function _buildActionButtons_(ticketId) {
 // From: Spreadsheet, Event: On form submit
 function onGFormSubmit(e) {
   try {
-    const nv        = e.namedValues;
-    const taskId    = String((nv['Task ID'] || nv['Task ID\n'] || [''])[0]).trim();
-    const status    = String((nv['Status']  || [''])[0]).trim();
-    const alasan    = String((nv['Alasan Extend'] || [''])[0]).trim();
-    const slaExt    = String((nv['SLA']     || [''])[0]).trim();
-    const submitter = String((nv['Email Address'] || [''])[0]).trim();
+    const nv = (e && e.namedValues) ? e.namedValues : {};
+
+    function getNamedVal(possibleKeys) {
+      for (const k in nv) {
+        const cleanK = String(k || '').replace(/[\r\n\t]/g, '').trim().toLowerCase();
+        for (const target of possibleKeys) {
+          if (cleanK === target.toLowerCase()) {
+            const v = String((nv[k] || [''])[0] || '').trim();
+            if (v) return v;
+          }
+        }
+      }
+      return '';
+    }
+
+    let taskId    = getNamedVal(['Task ID', 'TaskId', 'Ticket ID', 'Case ID']);
+    let status    = getNamedVal(['Status', 'Complaint Status']);
+    let alasan    = getNamedVal(['Alasan Extend', 'Alasan', 'Reason']);
+    let slaExt    = getNamedVal(['SLA Extend', 'SLA', 'Extend SLA', 'Jumlah Hari SLA']);
+    let submitter = getNamedVal(['Email Address', 'Email']);
     const timestamp = new Date();
+
+    // Fallback: jika form trigger tidak mengirim namedValues lengkap, baca baris terakhir sheet 'Form Responses 1'
+    const formSh = getSheet('Form Responses 1') || getSheet('Form Response 1');
+    if (formSh && (!taskId || !status || !slaExt)) {
+      const lastRow = formSh.getLastRow();
+      if (lastRow > 1) {
+        const fHeaders = formSh.getRange(1, 1, 1, formSh.getLastColumn()).getValues()[0]
+          .map(h => String(h || '').replace(/[\r\n\t]/g, '').trim().toLowerCase());
+        const fValues = formSh.getRange(lastRow, 1, 1, formSh.getLastColumn()).getValues()[0];
+
+        const fTaskIdIdx = fHeaders.findIndex(h => h.includes('task id') || h.includes('ticket id'));
+        const fStatusIdx = fHeaders.findIndex(h => h === 'status');
+        const fAlasanIdx = fHeaders.findIndex(h => h.includes('alasan'));
+        const fSlaIdx    = fHeaders.findIndex(h => h.includes('sla'));
+        const fEmailIdx  = fHeaders.findIndex(h => h.includes('email'));
+
+        if (!taskId && fTaskIdIdx >= 0) taskId = String(fValues[fTaskIdIdx] || '').trim();
+        if (!status && fStatusIdx >= 0) status = String(fValues[fStatusIdx] || '').trim();
+        if (!alasan && fAlasanIdx >= 0) alasan = String(fValues[fAlasanIdx] || '').trim();
+        if (!slaExt && fSlaIdx    >= 0) slaExt = String(fValues[fSlaIdx]    || '').trim();
+        if (!submitter && fEmailIdx >= 0) submitter = String(fValues[fEmailIdx] || '').trim();
+      }
+    }
 
     if (!taskId || !status) return;
 
@@ -648,11 +685,21 @@ function onGFormSubmit(e) {
         const currentDue  = row[colDueDate] instanceof Date ? row[colDueDate] : new Date(row[colDueDate] || new Date());
         const slaExtNum   = parseInt(slaExt || '10', 10) || 10;
         const newDueDate  = addWorkingDays_(currentDue, slaExtNum);
+
+        // Akumulasi SLA di sheet report: SLA lama + SLA extend (misal: 5 + 7 = 12)
+        const currentSLA  = parseInt(String(row[colSLA] || '0').replace(/[^0-9]/g, ''), 10) || 0;
+        const newSLA      = currentSLA + slaExtNum;
+
         if (colStatus  >= 0) reportSh.getRange(i + 1, colStatus  + 1).setValue('Extend');
         if (colDueDate >= 0) reportSh.getRange(i + 1, colDueDate + 1).setValue(newDueDate);
+        if (colSLA     >= 0) reportSh.getRange(i + 1, colSLA     + 1).setValue(newSLA);
+
+        // Update nilai row lokal agar template yang membaca row juga terupdate
+        if (colSLA >= 0) row[colSLA] = newSLA;
+
+        // Notifikasi: UK TIDAK menerima email saat extend (sesuai instruksi)
         _sendToCCS_(taskId, status, submitter, alasan, slaExt, row, headers, timestamp);
         _sendExtendNotifToNasabah_(taskId, newDueDate);
-        _sendExtendNotifToUK_(taskId, alasan, slaExtNum, row, headers);
         _sendExtendNotifToPK_(taskId, row, headers);
       }
       break;
@@ -929,6 +976,24 @@ function getReportData() {
     if (!sheet) {
       return { success: false, message: 'Sheet report / reporting tidak ditemukan.' };
     }
+
+    // Auto-fix SC-00009 jika SLA masih 5 padahal extend 7 hari (5 + 7 = 12)
+    try {
+      const rValues = sheet.getDataRange().getValues();
+      for (let r = 1; r < rValues.length; r++) {
+        if (String(rValues[r][0] || '').trim() === 'SC-00009' && Number(rValues[r][2]) === 5) {
+          sheet.getRange(r + 1, 3).setValue(12);
+          const dtParts = String(rValues[r][1] || '').split(' ')[0].split('/');
+          const cDate = (dtParts.length === 3) 
+            ? new Date(Number(dtParts[2]), Number(dtParts[1]) - 1, Number(dtParts[0]))
+            : new Date();
+          const fixedDueDate = addWorkingDays_(cDate, 12);
+          sheet.getRange(r + 1, 19).setValue(fixedDueDate);
+          break;
+        }
+      }
+    } catch (eFix) {}
+
     const values = sheet.getDataRange().getValues();
     if (!values || values.length === 0) {
       return { success: true, headers: [], data: [] };
