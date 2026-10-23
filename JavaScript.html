@@ -11,6 +11,7 @@ let allReportData = [];
 let filteredReportData = [];
 let allUserData   = [];
 let deleteTargetNik = null;
+let selectedAttachments = [];
 
 const REPORT_COLUMNS = [
   'Case ID',
@@ -394,9 +395,89 @@ function clearAutoFilled() {
   document.getElementById('f-email-pic').placeholder = 'Email PIC';
 }
 
+function formatFileSize(bytes) {
+  if (!bytes || bytes === 0) return '0k';
+  if (bytes < 1024) return bytes + 'b';
+  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + 'k';
+  return (bytes / (1024 * 1024)).toFixed(1) + 'M';
+}
+
+function handleFileSelect(event) {
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
+
+  const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1 MB
+  const MAX_FILES = 5;
+
+  for (const file of files) {
+    if (selectedAttachments.length >= MAX_FILES) {
+      showToast('Maksimal hanya dapat mengupload 5 file!', 'error');
+      break;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      showToast(`Ukuran file "${file.name}" melebihi batas 1 MB!`, 'error');
+      continue;
+    }
+    if (selectedAttachments.some(f => f.name === file.name && f.size === file.size)) {
+      continue;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const base64 = String(e.target.result || '').split(',')[1];
+      selectedAttachments.push({
+        name: file.name,
+        size: file.size,
+        type: file.type || 'application/octet-stream',
+        base64: base64
+      });
+      renderAttachmentList();
+    };
+    reader.readAsDataURL(file);
+  }
+
+  event.target.value = '';
+}
+
+function removeAttachment(index) {
+  selectedAttachments.splice(index, 1);
+  renderAttachmentList();
+}
+
+function renderAttachmentList() {
+  const container = document.getElementById('attachment-list');
+  const hint = document.getElementById('f-attachment-hint');
+  if (!container) return;
+
+  if (hint) {
+    hint.textContent = selectedAttachments.length === 0 
+      ? 'No file chosen' 
+      : `${selectedAttachments.length} file dipilih`;
+  }
+
+  if (selectedAttachments.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  container.innerHTML = selectedAttachments.map((f, idx) => `
+    <div class="flex items-center text-xs py-0.5">
+      <span class="text-[#c25e00] font-medium hover:underline cursor-default">${escapeHtml(f.name)}</span>
+      <span class="text-slate-600 text-xs ml-1 font-normal">(${formatFileSize(f.size)})</span>
+      <button type="button" onclick="removeAttachment(${idx})" class="inline-flex items-center ml-1.5 text-red-500 hover:text-red-700 transition-colors focus:outline-none" title="Hapus file">
+        <svg class="w-4 h-4 fill-current" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 000 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
+        </svg>
+      </button>
+    </div>
+  `).join('');
+}
+
 function resetComplaintForm() {
   document.getElementById('complaint-form').reset();
   clearAutoFilled();
+  selectedAttachments = [];
+  renderAttachmentList();
   // Reset dropdowns
   document.getElementById('f-complaint-cat').innerHTML = '<option value="">-- Pilih ProductCategory dulu --</option>';
   document.getElementById('f-complaint-cat').disabled = true;
@@ -406,6 +487,7 @@ function resetComplaintForm() {
 
 function handleComplaintSubmit(e) {
   e.preventDefault();
+  const amountEl = document.getElementById('f-amount') || document.getElementById('f-amount1');
   const formData = {
     productCategory:       document.getElementById('f-product-cat').value,
     complaintCategory:     document.getElementById('f-complaint-cat').value,
@@ -423,12 +505,18 @@ function handleComplaintSubmit(e) {
     accountNumber:         document.getElementById('f-account-number').value,
     atmCardNumber:         document.getElementById('f-atm-card').value,
     dateTransaction:       document.getElementById('f-date-trx').value,
-    transactionAmount1:    document.getElementById('f-amount1').value,
-    transactionAmount2:    document.getElementById('f-amount2').value,
+    transactionAmount:     amountEl ? amountEl.value : '',
+    transactionAmount1:    amountEl ? amountEl.value : '',
     destinationPhoneNumber: document.getElementById('f-dest-phone').value,
     providerName:          document.getElementById('f-provider').value,
     description:           document.getElementById('f-description').value,
-    createdBy:             currentUser ? currentUser.nama : ''
+    createdBy:             currentUser ? currentUser.nama : '',
+    attachments:           selectedAttachments.map(a => ({
+      name:   a.name,
+      size:   a.size,
+      type:   a.type,
+      base64: a.base64
+    }))
   };
 
   const submitBtn = document.getElementById('complaint-submit-btn');

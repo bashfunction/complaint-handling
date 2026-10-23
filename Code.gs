@@ -296,7 +296,29 @@ function submitComplaint(formData) {
     const ticketId  = generateTicketId();
     const timestamp = new Date();
 
-    // Build complaints row (matching sheet headers)
+    // Ensure header S1 is "Provider Name/Merchant" and W1 is "Attachment"
+    try {
+      const hS = String(sheet.getRange(1, 19).getValue() || '').trim();
+      if (hS === 'Provider Name') {
+        sheet.getRange(1, 19).setValue('Provider Name/Merchant');
+      }
+      const hW = String(sheet.getRange(1, 23).getValue() || '').trim();
+      if (!hW) {
+        sheet.getRange(1, 23).setValue('Attachment');
+      }
+    } catch (eH) {
+      Logger.log('Header check error: ' + eH.message);
+    }
+
+    // Save attachments to Google Drive if any
+    let attachmentUrls = [];
+    if (formData.attachments && formData.attachments.length > 0) {
+      attachmentUrls = _saveAttachmentsToDrive_(ticketId, formData.attachments);
+    }
+    const attachmentStr = attachmentUrls.join('\n');
+    const amountVal     = formData.transactionAmount || formData.transactionAmount1 || '';
+
+    // Build complaints row (matching updated sheet headers without Transaction Amount 2)
     const complaintRow = [
       timestamp,
       ticketId,
@@ -311,8 +333,7 @@ function submitComplaint(formData) {
       formData.name,
       formData.accountNumber,
       formData.atmCardNumber,
-      formData.transactionAmount1,
-      formData.transactionAmount2,
+      amountVal,
       formData.emailAddress,
       formData.phoneNumber,
       formData.dateTransaction,
@@ -320,7 +341,8 @@ function submitComplaint(formData) {
       formData.providerName,
       formData.pic,
       formData.emailPic,
-      formData.description
+      formData.description,
+      attachmentStr
     ];
     sheet.appendRow(complaintRow);
 
@@ -348,10 +370,10 @@ function submitComplaint(formData) {
       'reason':                     formData.reason,
       'date completed':             '',
       'due date':                   dueDate,
-      'nominal':                    formData.transactionAmount1,
+      'nominal':                    amountVal,
       'tanggal transaksi':          formData.dateTransaction,
       'description report':         formData.description,
-      'location and merchant name': '',
+      'location and merchant name': formData.providerName,
       'completeday':                ''
     };
 
@@ -369,6 +391,45 @@ function submitComplaint(formData) {
     return { success: false, message: err.message };
   } finally {
     lock.releaseLock();
+  }
+}
+
+// ─── HELPER: SAVE ATTACHMENTS TO DRIVE ────────────────────
+function _saveAttachmentsToDrive_(ticketId, attachments) {
+  if (!attachments || !attachments.length) return [];
+  try {
+    const FOLDER_NAME = 'Complaint Attachments';
+    let folder;
+    const existingFolders = DriveApp.getFoldersByName(FOLDER_NAME);
+    if (existingFolders.hasNext()) {
+      folder = existingFolders.next();
+    } else {
+      folder = DriveApp.createFolder(FOLDER_NAME);
+    }
+
+    const urls = [];
+    attachments.forEach((att, idx) => {
+      try {
+        const decoded = Utilities.base64Decode(att.base64);
+        const fileName = `[${ticketId}]_${att.name}`;
+        const blob = Utilities.newBlob(decoded, att.type || 'application/octet-stream', fileName);
+        const file = folder.createFile(blob);
+        try {
+          file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        } catch (eShare) {
+          try {
+            file.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW);
+          } catch (eDom) {}
+        }
+        urls.push(file.getUrl());
+      } catch (eFile) {
+        Logger.log('Gagal menyimpan file attachment ' + (att.name || idx) + ': ' + eFile.message);
+      }
+    });
+    return urls;
+  } catch (err) {
+    Logger.log('saveAttachmentsToDrive error: ' + err.message);
+    return [];
   }
 }
 
